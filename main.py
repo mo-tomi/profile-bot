@@ -80,15 +80,8 @@ async def on_message(message):
 async def on_voice_state_update(member, before, after):
     # ボイスチャンネルに入室したときのみ反応
     if before.channel is None and after.channel is not None:
-        # 入室したボイスチャンネルを取得
-        voice_channel = after.channel
-        
-        # ボイスチャンネルに関連するテキストチャンネルを取得
-        text_channel = discord.utils.get(voice_channel.guild.text_channels, name=voice_channel.name)
-        
-        # テキストチャンネルが見つからない場合はデフォルトのチャンネルを使用
-        if text_channel is None:
-            text_channel = voice_channel.guild.system_channel  # サーバーのデフォルトチャンネル
+        # 🔧 通知を送るチャンネルのID（ここを変更！）
+        notify_channel = client.get_channel(1300291307750559754)
         
         # ユーザーの自己紹介リンクを取得
         user_link = introduction_links.get(str(member.id))
@@ -96,20 +89,17 @@ async def on_voice_state_update(member, before, after):
         # メッセージを作成
         if user_link:
             msg = (
-                f"{member.mention} さんが入室しました。\n"  # ここを変更！
+                f"{member.mention} さんがボイスチャンネルに参加しました！🎉\n"
                 f"📌 自己紹介はこちら → {user_link}"
             )
         else:
             msg = (
-                f"{member.mention} さんが入室しました。\n"  # ここを変更！
+                f"{member.mention} さんがボイスチャンネルに参加しました！🎉\n"
                 "❌ 自己紹介がまだありません"
             )
         
-        # テキストチャンネルにメッセージを送信
-        if text_channel:
-            await text_channel.send(msg)
-        else:
-            print(f"❌ テキストチャンネルが見つかりません: {voice_channel.name}")
+        # 通知チャンネルにメッセージを送信
+        await notify_channel.send(msg)
 
 # 🌐 RenderでBotを常時稼働させるための関数を呼び出す
 keep_alive()

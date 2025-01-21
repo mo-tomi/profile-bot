@@ -55,6 +55,7 @@ async def on_ready():
     for channel_id in INTRODUCTION_CHANNEL_IDS:
         channel = client.get_channel(channel_id)
         if channel:
+            print(f"🔍 チャンネル {channel.name} からメッセージを読み込み中...")  # デバッグ用
             # 過去のメッセージを最大100件取得
             async for message in channel.history(limit=100):
                 if message.author.bot:  # Botのメッセージは無視
@@ -63,6 +64,7 @@ async def on_ready():
                 message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
                 # ユーザーIDをキーにしてリンクを保存
                 introduction_links[str(message.author.id)] = message_link
+                print(f"📝 {message.author} のリンクを保存: {message_link}")  # デバッグ用
     
     # リンクを保存
     save_links()
@@ -87,26 +89,37 @@ async def on_message(message):
 async def on_voice_state_update(member, before, after):
     # ボイスチャンネルに入室したときのみ反応
     if before.channel is None and after.channel is not None:
+        print(f"🔔 {member.name} がボイスチャンネルに入室しました。")  # デバッグ用
+        
         # 🔧 通知を送るチャンネルのID（ここを変更！）
         notify_channel = client.get_channel(1300291307750559754)
         
+        if notify_channel is None:
+            print("❌ 通知チャンネルが見つかりません。")  # デバッグ用
+            return
+        
         # ユーザーの自己紹介リンクを取得
         user_link = introduction_links.get(str(member.id))
+        print(f"🔗 {member.name} のリンク: {user_link}")  # デバッグ用
         
         # メッセージを作成
         if user_link:
             msg = (
-                f"{member.mention} さんが入室しました。\n"  # ここを変更！
+                f"{member.mention} さんが入室しました。\n"
                 f"📌 自己紹介はこちら → {user_link}"
             )
         else:
             msg = (
-                f"{member.mention} さんが入室しました。\n"  # ここを変更！
+                f"{member.mention} さんが入室しました。\n"
                 "❌ 自己紹介がまだありません"
             )
         
         # 通知チャンネルにメッセージを送信
-        await notify_channel.send(msg)
+        try:
+            await notify_channel.send(msg)
+            print(f"📩 {member.name} のメッセージを送信しました。")  # デバッグ用
+        except Exception as e:
+            print(f"❌ メッセージ送信エラー: {e}")  # デバッグ用
 
 # 🌐 RenderでBotを常時稼働させるための関数を呼び出す
 keep_alive()

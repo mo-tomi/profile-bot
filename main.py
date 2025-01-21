@@ -15,12 +15,15 @@ intents.members = True  # メンバー情報を読み取る権限
 client = discord.Client(intents=intents)
 
 # 🔧 自己紹介チャンネルのIDを設定（ここを変更！）
-INTRODUCTION_CHANNEL_IDS = [
-    1300291307750559754,  # 自己紹介チャンネル1のID
-    1302151049368571925,  # 自己紹介チャンネル2のID
-    1302151154981011486,  # 自己紹介チャンネル3のID
-    1306190768431431721,  # 自己紹介チャンネル4のID
-    1306190915483734026,  # 自己紹介チャンネル5のID
+INTRODUCTION_CHANNEL_ID = 1300659373227638794  # 自己紹介チャンネルのID
+
+# 🔧 ボイスチャンネルのIDを設定（ここを変更！）
+VOICE_CHANNEL_IDS = [
+    1300291307750559754,  # ボイスチャンネル1のID
+    1302151049368571925,  # ボイスチャンネル2のID
+    1302151154981011486,  # ボイスチャンネル3のID
+    1306190768431431721,  # ボイスチャンネル4のID
+    1306190915483734026,  # ボイスチャンネル5のID
 ]
 
 # 📂 自己紹介リンクを保存する辞書
@@ -51,20 +54,17 @@ async def on_ready():
     print(f'✅ Botがログインしました: {client.user}')
     print(f"📜 読み込まれたリンク数: {len(introduction_links)}")
 
-    # すべての自己紹介チャンネルからメッセージを取得
-    for channel_id in INTRODUCTION_CHANNEL_IDS:
-        channel = client.get_channel(channel_id)
-        if channel:
-            print(f"🔍 チャンネル {channel.name} からメッセージを読み込み中...")  # デバッグ用
-            # 過去のメッセージを最大100件取得
-            async for message in channel.history(limit=100):
-                if message.author.bot:  # Botのメッセージは無視
-                    continue
-                # メッセージリンクを生成
-                message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
-                # ユーザーIDをキーにしてリンクを保存
-                introduction_links[str(message.author.id)] = message_link
-                print(f"📝 {message.author} のリンクを保存: {message_link}")  # デバッグ用
+    # 自己紹介チャンネルを取得
+    channel = client.get_channel(INTRODUCTION_CHANNEL_ID)
+    if channel:
+        # 過去のメッセージを最大100件取得
+        async for message in channel.history(limit=100):
+            if message.author.bot:  # Botのメッセージは無視
+                continue
+            # メッセージリンクを生成
+            message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+            # ユーザーIDをキーにしてリンクを保存
+            introduction_links[str(message.author.id)] = message_link
     
     # リンクを保存
     save_links()
@@ -74,7 +74,7 @@ async def on_ready():
 @client.event
 async def on_message(message):
     # 自己紹介チャンネルでのみ反応
-    if message.channel.id in INTRODUCTION_CHANNEL_IDS and not message.author.bot:
+    if message.channel.id == INTRODUCTION_CHANNEL_ID and not message.author.bot:
         # メッセージリンクを作成
         message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
         
@@ -89,37 +89,28 @@ async def on_message(message):
 async def on_voice_state_update(member, before, after):
     # ボイスチャンネルに入室したときのみ反応
     if before.channel is None and after.channel is not None:
-        print(f"🔔 {member.name} がボイスチャンネルに入室しました。")  # デバッグ用
-        
-        # 🔧 通知を送るチャンネルのID（ここを変更！）
-        notify_channel = client.get_channel(1300291307750559754)
-        
-        if notify_channel is None:
-            print("❌ 通知チャンネルが見つかりません。")  # デバッグ用
-            return
-        
-        # ユーザーの自己紹介リンクを取得
-        user_link = introduction_links.get(str(member.id))
-        print(f"🔗 {member.name} のリンク: {user_link}")  # デバッグ用
-        
-        # メッセージを作成
-        if user_link:
-            msg = (
-                f"{member.mention} さんが入室しました。\n"
-                f"📌 自己紹介はこちら → {user_link}"
-            )
-        else:
-            msg = (
-                f"{member.mention} さんが入室しました。\n"
-                "❌ 自己紹介がまだありません"
-            )
-        
-        # 通知チャンネルにメッセージを送信
-        try:
-            await notify_channel.send(msg)
-            print(f"📩 {member.name} のメッセージを送信しました。")  # デバッグ用
-        except Exception as e:
-            print(f"❌ メッセージ送信エラー: {e}")  # デバッグ用
+        # 入室したボイスチャンネルのIDを確認
+        if after.channel.id in VOICE_CHANNEL_IDS:
+            # 入室したボイスチャンネルを取得
+            voice_channel = after.channel
+            
+            # ユーザーの自己紹介リンクを取得
+            user_link = introduction_links.get(str(member.id))
+            
+            # メッセージを作成
+            if user_link:
+                msg = (
+                    f"{member.mention} さんが入室しました。\n"  # ここを変更！
+                    f"📌 自己紹介はこちら → {user_link}"
+                )
+            else:
+                msg = (
+                    f"{member.mention} さんが入室しました。\n"  # ここを変更！
+                    "❌ 自己紹介がまだありません"
+                )
+            
+            # 入室したボイスチャンネルにメッセージを送信
+            await voice_channel.send(msg)
 
 # 🌐 RenderでBotを常時稼働させるための関数を呼び出す
 keep_alive()

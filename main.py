@@ -80,8 +80,8 @@ async def on_message(message):
 async def on_voice_state_update(member, before, after):
     # ボイスチャンネルに入室したときのみ反応
     if before.channel is None and after.channel is not None:
-        # 🔧 通知を送るチャンネルのID（ここを変更！）
-        notify_channel = client.get_channel(1300291307750559754)
+        # 入室したボイスチャンネルを取得
+        voice_channel = after.channel
         
         # ユーザーの自己紹介リンクを取得
         user_link = introduction_links.get(str(member.id))
@@ -89,17 +89,17 @@ async def on_voice_state_update(member, before, after):
         # メッセージを作成
         if user_link:
             msg = (
-                f"{member.mention} さんがボイスチャンネルに参加しました！🎉\n"
+                f"{member.mention} さんが {voice_channel.name} に入室しました。\n"
                 f"📌 自己紹介はこちら → {user_link}"
             )
         else:
             msg = (
-                f"{member.mention} さんがボイスチャンネルに参加しました！🎉\n"
+                f"{member.mention} さんが {voice_channel.name} に参加しました！🎉\n"
                 "❌ 自己紹介がまだありません"
             )
         
-        # 通知チャンネルにメッセージを送信
-        await notify_channel.send(msg)
+        # 入室したボイスチャンネルにメッセージを送信
+        await voice_channel.send(msg)
 
 # 🌐 RenderでBotを常時稼働させるための関数を呼び出す
 keep_alive()

@@ -15,7 +15,13 @@ intents.members = True  # メンバー情報を読み取る権限
 client = discord.Client(intents=intents)
 
 # 🔧 自己紹介チャンネルのIDを設定（ここを変更！）
-INTRODUCTION_CHANNEL_ID = 1300659373227638794  # 自己紹介チャンネルのID
+INTRODUCTION_CHANNEL_IDS = [
+    1300291307750559754,  # 自己紹介チャンネル1のID
+    1302151049368571925,  # 自己紹介チャンネル2のID
+    1302151154981011486,  # 自己紹介チャンネル3のID
+    1306190768431431721,  # 自己紹介チャンネル4のID
+    1306190915483734026,  # 自己紹介チャンネル5のID
+]
 
 # 📂 自己紹介リンクを保存する辞書
 introduction_links = {}
@@ -45,17 +51,18 @@ async def on_ready():
     print(f'✅ Botがログインしました: {client.user}')
     print(f"📜 読み込まれたリンク数: {len(introduction_links)}")
 
-    # 自己紹介チャンネルを取得
-    channel = client.get_channel(INTRODUCTION_CHANNEL_ID)
-    
-    # 過去のメッセージを最大100件取得
-    async for message in channel.history(limit=100):
-        if message.author.bot:  # Botのメッセージは無視
-            continue
-        # メッセージリンクを生成
-        message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
-        # ユーザーIDをキーにしてリンクを保存
-        introduction_links[str(message.author.id)] = message_link
+    # すべての自己紹介チャンネルからメッセージを取得
+    for channel_id in INTRODUCTION_CHANNEL_IDS:
+        channel = client.get_channel(channel_id)
+        if channel:
+            # 過去のメッセージを最大100件取得
+            async for message in channel.history(limit=100):
+                if message.author.bot:  # Botのメッセージは無視
+                    continue
+                # メッセージリンクを生成
+                message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+                # ユーザーIDをキーにしてリンクを保存
+                introduction_links[str(message.author.id)] = message_link
     
     # リンクを保存
     save_links()
@@ -65,7 +72,7 @@ async def on_ready():
 @client.event
 async def on_message(message):
     # 自己紹介チャンネルでのみ反応
-    if message.channel.id == INTRODUCTION_CHANNEL_ID and not message.author.bot:
+    if message.channel.id in INTRODUCTION_CHANNEL_IDS and not message.author.bot:
         # メッセージリンクを作成
         message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
         
@@ -89,12 +96,12 @@ async def on_voice_state_update(member, before, after):
         # メッセージを作成
         if user_link:
             msg = (
-                f"{member.mention} さんがボイスチャンネルに参加しました！🎉\n"
+                f"{member.mention} さんが入室しました。\n"  # ここを変更！
                 f"📌 自己紹介はこちら → {user_link}"
             )
         else:
             msg = (
-                f"{member.mention} さんがボイスチャンネルに参加しました！🎉\n"
+                f"{member.mention} さんが入室しました。\n"  # ここを変更！
                 "❌ 自己紹介がまだありません"
             )
         

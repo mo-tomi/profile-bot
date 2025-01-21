@@ -1,7 +1,7 @@
 import discord  # Discordのライブラリをインポート
 import os  # 環境変数を扱うためのライブラリ
 import json  # JSON形式のデータを扱うためのライブラリ
-from keep_alive import keep_alive  # RenderでBotを常時稼働させるための関数
+# from keep_alive import keep_alive  # コメントアウト
 from dotenv import load_dotenv  # 環境変数を読み込むためのライブラリ
 
 load_dotenv()  # .envファイルを読み込む
@@ -130,7 +130,7 @@ async def on_voice_state_update(member, before, after):
             # メッセージ送信前にログを出力
             print(f"📨 通知メッセージを送信します: {msg}")
             
-            # 通知チャンネルにメッセージを送信
+            # メッセージ送信
             try:
                 await notify_channel.send(msg)
                 print(f"✅ {member} の入室通知を送信しました。")
@@ -142,7 +142,12 @@ async def on_voice_state_update(member, before, after):
                 print(f"❌ メッセージ送信中に予期しないエラーが発生しました: {e}")
 
 # 🌐 RenderでBotを常時稼働させるための関数を呼び出す
-keep_alive()
+# keep_alive()  # コメントアウト
 
 # 🔑 TOKENを使ってBotを起動
-client.run(os.getenv("TOKEN"))
+token = os.getenv("TOKEN")
+if not token:
+    print("❌ TOKENが設定されていません。環境変数を確認してください。")
+    exit()
+
+client.run(token)

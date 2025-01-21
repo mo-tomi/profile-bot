@@ -1,73 +1,92 @@
 # main.py
-import discord
-import os
-import json
-from keep_alive import keep_alive
+import discord  # Discordのライブラリをインポート
+import os  # 環境変数を扱うためのライブラリ
+import json  # JSON形式のデータを扱うためのライブラリ
+from keep_alive import keep_alive  # RenderでBotを常時稼働させるための関数
 
-# 🌟 ここにBotの設定を書いていきます
+# 🔧 Botの権限設定
+intents = discord.Intents.default()  # デフォルトの権限を設定
+intents.voice_states = True  # ボイスチャンネルの状態を監視する権限
+intents.messages = True  # メッセージを読み取る権限
+intents.message_content = True  # メッセージの内容を読み取る権限（重要！）
+intents.members = True  # メンバー情報を読み取る権限
 
-# 🔧 権限設定（ボットができることを許可）
-intents = discord.Intents.default()
-intents.voice_states = True  # ボイスチャンネルの情報を見る
-intents.messages = True      # メッセージを見る
-intents.message_content = True  # メッセージの中身を見る（重要！）
-intents.members = True       # メンバー情報を見る
-
+# Discordクライアントを作成
 client = discord.Client(intents=intents)
 
-# 🔧 自己紹介チャンネルのIDを設定（後で変更）
-INTRODUCTION_CHANNEL_ID = 1300659373227638794  # ✏️ ここを変更！
+# 🔧 自己紹介チャンネルのIDを設定（ここを変更！）
+INTRODUCTION_CHANNEL_ID = 1300659373227638794  # 自己紹介チャンネルのID
 
 # 📂 自己紹介リンクを保存する辞書
 introduction_links = {}
 
 # 💾 リンクをファイルに保存する関数
 def save_links():
+    # introduction_links辞書をJSON形式でファイルに保存
     with open("introduction_links.json", "w") as f:
         json.dump(introduction_links, f)
 
 # 📥 リンクをファイルから読み込む関数
 def load_links():
     try:
+        # introduction_links.jsonファイルからデータを読み込む
         with open("introduction_links.json", "r") as f:
             return json.load(f)
     except FileNotFoundError:
+        # ファイルが存在しない場合は空の辞書を返す
         return {}
 
-# 🚀 Bot起動時の処理
+# 🚀 Botが起動したときの処理
 @client.event
 async def on_ready():
     global introduction_links
+    # 起動時にリンクを読み込む
     introduction_links = load_links()
     print(f'✅ Botがログインしました: {client.user}')
     print(f"📜 読み込まれたリンク数: {len(introduction_links)}")
 
-# 💬 メッセージ受信時の処理
+    # 自己紹介チャンネルを取得
+    channel = client.get_channel(INTRODUCTION_CHANNEL_ID)
+    
+    # 過去のメッセージを最大100件取得
+    async for message in channel.history(limit=100):
+        if message.author.bot:  # Botのメッセージは無視
+            continue
+        # メッセージリンクを生成
+        message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+        # ユーザーIDをキーにしてリンクを保存
+        introduction_links[str(message.author.id)] = message_link
+    
+    # リンクを保存
+    save_links()
+    print(f"📜 過去のメッセージを読み込みました。総リンク数: {len(introduction_links)}")
+
+# 💬 メッセージが送信されたときの処理
 @client.event
 async def on_message(message):
     # 自己紹介チャンネルでのみ反応
-    if message.channel.id == INTRODUCTION_CHANNEL_ID:
-        # メッセージリンク作成
+    if message.channel.id == INTRODUCTION_CHANNEL_ID and not message.author.bot:
+        # メッセージリンクを作成
         message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
         
-        # ユーザーIDをキーにして保存
+        # ユーザーIDをキーにしてリンクを保存
         introduction_links[str(message.author.id)] = message_link
-        save_links()
+        save_links()  # リンクを保存
         
         print(f"📝 {message.author} のリンクを保存: {message_link}")
 
-# 🎧 ボイスチャンネル入室時の処理
+# 🎧 ボイスチャンネルの状態が変わったときの処理
 @client.event
 async def on_voice_state_update(member, before, after):
-    # 入室時のみ反応（退室時は無視）
+    # ボイスチャンネルに入室したときのみ反応
     if before.channel is None and after.channel is not None:
-        # 🔧 通知先チャンネルID（後で変更）
-        notify_channel = client.get_channel(1300291307750559754)  # ✏️ ここを変更！
+        # 🔧 通知を送るチャンネルのID（ここを変更！）
+        notify_channel = client.get_channel(1300291307750559754)
         
-        # ユーザーの自己紹介リンクを検索
+        # ユーザーの自己紹介リンクを取得
         user_link = introduction_links.get(str(member.id))
         
-        # メッセージ作成
+        # メッセージを作成
         if user_link:
             msg = (
                 f"{member.mention} さんがボイスチャンネルに参加しました！🎉\n"
@@ -79,10 +98,11 @@ async def on_voice_state_update(member, before, after):
                 "❌ 自己紹介がまだありません"
             )
         
+        # 通知チャンネルにメッセージを送信
         await notify_channel.send(msg)
 
-# 🌐 サーバーを起動し続ける（Render用）
+# 🌐 RenderでBotを常時稼働させるための関数を呼び出す
 keep_alive()
 
-# 🔑 TOKENでBotを起動
+# 🔑 TOKENを使ってBotを起動
 client.run(os.getenv("TOKEN"))

@@ -60,8 +60,12 @@ def save_links():
     """
     introduction_links辞書をJSON形式でファイルに保存します。
     """
-    with open("introduction_links.json", "w", encoding='utf-8') as f:
-        json.dump(introduction_links, f, ensure_ascii=False, indent=4)
+    try:
+        with open("introduction_links.json", "w", encoding='utf-8') as f:
+            json.dump(introduction_links, f, ensure_ascii=False, indent=4)
+        print("✅ introduction_links.json にリンクを保存しました。")
+    except Exception as e:
+        print(f"❌ リンクの保存中にエラーが発生しました: {e}")
 
 # 📥 リンクをファイルから読み込む関数
 def load_links():
@@ -71,8 +75,16 @@ def load_links():
     """
     try:
         with open("introduction_links.json", "r", encoding='utf-8') as f:
+            print("✅ introduction_links.json を読み込みました。")
             return json.load(f)
     except FileNotFoundError:
+        print("⚠️ introduction_links.json が存在しません。新規作成します。")
+        return {}
+    except json.JSONDecodeError as e:
+        print(f"❌ introduction_links.json の読み込み中にJSONエラーが発生しました: {e}")
+        return {}
+    except Exception as e:
+        print(f"❌ introduction_links.json の読み込み中にエラーが発生しました: {e}")
         return {}
 
 # 🚀 Botが起動したときの処理
@@ -93,8 +105,8 @@ async def on_ready():
         print(f"⚠️ 自己紹介チャンネルが見つかりません: {INTRODUCTION_CHANNEL_ID}")
         return
     
-    # 過去のメッセージを最大100件取得
-    async for message in channel.history(limit=100):
+    # 過去のメッセージを最大1000件取得（必要に応じて増やしてください）
+    async for message in channel.history(limit=1000):
         if message.author.bot:  # Botのメッセージは無視
             continue
         # メッセージリンクを生成
@@ -146,11 +158,13 @@ async def on_voice_state_update(member, before, after):
                     f"{member.mention} さんがボイスチャンネル `{after.channel.name}` に参加しました！🎉\n"
                     f"📌 自己紹介はこちら → {user_link}"
                 )
+                print(f"📨 {member} の自己紹介リンクを見つけました: {user_link}")
             else:
                 msg = (
                     f"{member.mention} さんがボイスチャンネル `{after.channel.name}` に参加しました！🎉\n"
                     "❌ 自己紹介がまだありません"
                 )
+                print(f"⚠️ {member} の自己紹介リンクが見つかりません。")
             
             # メッセージ送信前にログを出力
             print(f"📨 通知メッセージを送信します: {msg}")

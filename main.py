@@ -2,6 +2,9 @@ import discord  # Discordのライブラリをインポート
 import os  # 環境変数を扱うためのライブラリ
 import json  # JSON形式のデータを扱うためのライブラリ
 from keep_alive import keep_alive  # RenderでBotを常時稼働させるための関数
+from dotenv import load_dotenv  # 環境変数を読み込むためのライブラリ
+
+load_dotenv()  # .envファイルを読み込む
 
 # 🔧 Botの権限設定
 intents = discord.Intents.default()  # デフォルトの権限を設定
@@ -13,7 +16,7 @@ intents.members = True  # メンバー情報を読み取る権限
 # Discordクライアントを作成
 client = discord.Client(intents=intents)
 
-# 🔧 自己紹介チャンネルのIDを設定（ここを変更！）
+# 🔧 自己紹介チャンネルのIDを設定
 INTRODUCTION_CHANNEL_ID = 1300659373227638794  # 自己紹介チャンネルのID
 
 # 🔧 通知用テキストチャンネルのIDを設定
@@ -55,6 +58,8 @@ async def on_ready():
     introduction_links = load_links()
     print(f'✅ Botがログインしました: {client.user}')
     print(f"📜 読み込まれたリンク数: {len(introduction_links)}")
+    print(f"📢 監視対象ボイスチャンネル: {TARGET_VOICE_CHANNELS}")
+    print(f"📢 通知用テキストチャンネル: {NOTIFICATION_CHANNEL_ID}")
 
     # 自己紹介チャンネルを取得
     channel = client.get_channel(INTRODUCTION_CHANNEL_ID)
@@ -93,11 +98,13 @@ async def on_message(message):
 # 🎧 ボイスチャンネルの状態が変わったときの処理
 @client.event
 async def on_voice_state_update(member, before, after):
+    print(f"🔄 Voice state updated: {member} - before: {before.channel}, after: {after.channel}")
     # ボイスチャンネルに入室したときのみ反応
     if before.channel is None and after.channel is not None:
         voice_channel_id = after.channel.id
         # 対象のボイスチャンネルか確認
         if voice_channel_id in TARGET_VOICE_CHANNELS:
+            print(f"✅ {member} が対象のボイスチャンネルに参加しました: {after.channel.name} (ID: {voice_channel_id})")
             # 通知用テキストチャンネルを取得
             notify_channel = client.get_channel(NOTIFICATION_CHANNEL_ID)
             
@@ -120,9 +127,19 @@ async def on_voice_state_update(member, before, after):
                     "❌ 自己紹介がまだありません"
                 )
             
+            # メッセージ送信前にログを出力
+            print(f"📨 通知メッセージを送信します: {msg}")
+            
             # 通知チャンネルにメッセージを送信
-            await notify_channel.send(msg)
-            print(f"📨 {member} の入室通知を送信: {msg}")
+            try:
+                await notify_channel.send(msg)
+                print(f"✅ {member} の入室通知を送信しました。")
+            except discord.Forbidden:
+                print(f"❌ Botが通知チャンネルにメッセージを送信する権限がありません: {NOTIFICATION_CHANNEL_ID}")
+            except discord.HTTPException as e:
+                print(f"❌ メッセージ送信中にHTTPエラーが発生しました: {e}")
+            except Exception as e:
+                print(f"❌ メッセージ送信中に予期しないエラーが発生しました: {e}")
 
 # 🌐 RenderでBotを常時稼働させるための関数を呼び出す
 keep_alive()

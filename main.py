@@ -83,23 +83,33 @@ async def on_voice_state_update(member, before, after):
         # 入室したボイスチャンネルを取得
         voice_channel = after.channel
         
+        # ボイスチャンネルに関連するテキストチャンネルを取得
+        text_channel = discord.utils.get(voice_channel.guild.text_channels, name=voice_channel.name)
+        
+        # テキストチャンネルが見つからない場合はデフォルトのチャンネルを使用
+        if text_channel is None:
+            text_channel = voice_channel.guild.system_channel  # サーバーのデフォルトチャンネル
+        
         # ユーザーの自己紹介リンクを取得
         user_link = introduction_links.get(str(member.id))
         
         # メッセージを作成
         if user_link:
             msg = (
-                f"{member.mention} さんが {voice_channel.name} に入室しました。\n"
+                f"{member.mention} さんが入室しました。\n"  # ここを変更！
                 f"📌 自己紹介はこちら → {user_link}"
             )
         else:
             msg = (
-                f"{member.mention} さんが {voice_channel.name} に参加しました！🎉\n"
+                f"{member.mention} さんが入室しました。\n"  # ここを変更！
                 "❌ 自己紹介がまだありません"
             )
         
-        # 入室したボイスチャンネルにメッセージを送信
-        await voice_channel.send(msg)
+        # テキストチャンネルにメッセージを送信
+        if text_channel:
+            await text_channel.send(msg)
+        else:
+            print(f"❌ テキストチャンネルが見つかりません: {voice_channel.name}")
 
 # 🌐 RenderでBotを常時稼働させるための関数を呼び出す
 keep_alive()

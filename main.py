@@ -155,13 +155,13 @@ async def on_voice_state_update(member, before, after):
             # メッセージを作成
             if user_link:
                 msg = (
-                    f"{member.mention} さんがボイスチャンネル `{after.channel.name}` に参加しました！🎉\n"
+                    f"{member.display_name} さんが`{after.channel.name}` に入室しました！\n"
                     f"📌 自己紹介はこちら → {user_link}"
                 )
                 print(f"📨 {member} の自己紹介リンクを見つけました: {user_link}")
             else:
                 msg = (
-                    f"{member.mention} さんがボイスチャンネル `{after.channel.name}` に参加しました！🎉\n"
+                    f"{member.display_name} さんが`{after.channel.name}` に入室しました！\n"
                     "❌ 自己紹介がまだありません"
                 )
                 print(f"⚠️ {member} の自己紹介リンクが見つかりません。")

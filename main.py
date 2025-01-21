@@ -1,4 +1,3 @@
-# main.py
 import discord  # Discordのライブラリをインポート
 import os  # 環境変数を扱うためのライブラリ
 import json  # JSON形式のデータを扱うためのライブラリ
@@ -17,8 +16,11 @@ client = discord.Client(intents=intents)
 # 🔧 自己紹介チャンネルのIDを設定（ここを変更！）
 INTRODUCTION_CHANNEL_ID = 1300659373227638794  # 自己紹介チャンネルのID
 
-# 🔧 ボイスチャンネルのIDを設定（ここを変更！）
-VOICE_CHANNEL_IDS = [
+# 🔧 通知用テキストチャンネルのIDを設定
+NOTIFICATION_CHANNEL_ID = 1331177944244289598  # ここに取得したテキストチャンネルのIDを入力
+
+# 🔧 対象のボイスチャンネルIDのリスト
+TARGET_VOICE_CHANNELS = [
     1300291307750559754,  # ボイスチャンネル1のID
     1302151049368571925,  # ボイスチャンネル2のID
     1302151154981011486,  # ボイスチャンネル3のID
@@ -32,14 +34,14 @@ introduction_links = {}
 # 💾 リンクをファイルに保存する関数
 def save_links():
     # introduction_links辞書をJSON形式でファイルに保存
-    with open("introduction_links.json", "w") as f:
-        json.dump(introduction_links, f)
+    with open("introduction_links.json", "w", encoding='utf-8') as f:
+        json.dump(introduction_links, f, ensure_ascii=False, indent=4)
 
 # 📥 リンクをファイルから読み込む関数
 def load_links():
     try:
         # introduction_links.jsonファイルからデータを読み込む
-        with open("introduction_links.json", "r") as f:
+        with open("introduction_links.json", "r", encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
         # ファイルが存在しない場合は空の辞書を返す
@@ -56,15 +58,19 @@ async def on_ready():
 
     # 自己紹介チャンネルを取得
     channel = client.get_channel(INTRODUCTION_CHANNEL_ID)
-    if channel:
-        # 過去のメッセージを最大100件取得
-        async for message in channel.history(limit=100):
-            if message.author.bot:  # Botのメッセージは無視
-                continue
-            # メッセージリンクを生成
-            message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
-            # ユーザーIDをキーにしてリンクを保存
-            introduction_links[str(message.author.id)] = message_link
+    
+    if channel is None:
+        print(f"⚠️ 自己紹介チャンネルが見つかりません: {INTRODUCTION_CHANNEL_ID}")
+        return
+    
+    # 過去のメッセージを最大100件取得
+    async for message in channel.history(limit=100):
+        if message.author.bot:  # Botのメッセージは無視
+            continue
+        # メッセージリンクを生成
+        message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+        # ユーザーIDをキーにしてリンクを保存
+        introduction_links[str(message.author.id)] = message_link
     
     # リンクを保存
     save_links()
@@ -89,10 +95,15 @@ async def on_message(message):
 async def on_voice_state_update(member, before, after):
     # ボイスチャンネルに入室したときのみ反応
     if before.channel is None and after.channel is not None:
-        # 入室したボイスチャンネルのIDを確認
-        if after.channel.id in VOICE_CHANNEL_IDS:
-            # 入室したボイスチャンネルを取得
-            voice_channel = after.channel
+        voice_channel_id = after.channel.id
+        # 対象のボイスチャンネルか確認
+        if voice_channel_id in TARGET_VOICE_CHANNELS:
+            # 通知用テキストチャンネルを取得
+            notify_channel = client.get_channel(NOTIFICATION_CHANNEL_ID)
+            
+            if notify_channel is None:
+                print(f"⚠️ 通知チャンネルが見つかりません: {NOTIFICATION_CHANNEL_ID}")
+                return
             
             # ユーザーの自己紹介リンクを取得
             user_link = introduction_links.get(str(member.id))
@@ -100,17 +111,18 @@ async def on_voice_state_update(member, before, after):
             # メッセージを作成
             if user_link:
                 msg = (
-                    f"{member.mention} さんが入室しました。\n"  # ここを変更！
+                    f"{member.mention} さんがボイスチャンネル `{after.channel.name}` に参加しました！🎉\n"
                     f"📌 自己紹介はこちら → {user_link}"
                 )
             else:
                 msg = (
-                    f"{member.mention} さんが入室しました。\n"  # ここを変更！
+                    f"{member.mention} さんがボイスチャンネル `{after.channel.name}` に参加しました！🎉\n"
                     "❌ 自己紹介がまだありません"
                 )
             
-            # 入室したボイスチャンネルにメッセージを送信
-            await voice_channel.send(msg)
+            # 通知チャンネルにメッセージを送信
+            await notify_channel.send(msg)
+            print(f"📨 {member} の入室通知を送信: {msg}")
 
 # 🌐 RenderでBotを常時稼働させるための関数を呼び出す
 keep_alive()

@@ -1,25 +1,31 @@
 import discord  # Discordのライブラリをインポート
 import os  # 環境変数を扱うためのライブラリ
 import json  # JSON形式のデータを扱うためのライブラリ
-from keep_alive import keep_alive  # RenderでBotを常時稼働させるための関数
 from dotenv import load_dotenv  # 環境変数を読み込むためのライブラリ
-from flask import Flask
-import threading
+from flask import Flask  # Flaskをインポート
+import threading  # スレッドを扱うためのライブラリ
 
-load_dotenv()  # .envファイルを読み込む
+# 環境変数をロード
+load_dotenv()
 
 # Flaskアプリケーションのセットアップ
-app = Flask('')
+app = Flask(__name__)
 
 @app.route('/')
 def home():
     return "Bot is running!"
 
-def run():
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
+def run_flask():
+    """
+    Flaskサーバーを指定されたポートで実行します。
+    Render.com は環境変数 'PORT' を使用してポートを指定します。
+    """
+    port = int(os.getenv("PORT", 8080))  # Render.comが指定するポートを取得（デフォルトは8080）
+    app.run(host='0.0.0.0', port=port)
 
 # 別スレッドでFlaskアプリを実行
-threading.Thread(target=run).start()
+flask_thread = threading.Thread(target=run_flask)
+flask_thread.start()
 
 # 🔧 Botの権限設定
 intents = discord.Intents.default()  # デフォルトの権限を設定
@@ -32,10 +38,10 @@ intents.members = True  # メンバー情報を読み取る権限
 client = discord.Client(intents=intents)
 
 # 🔧 自己紹介チャンネルのIDを設定
-INTRODUCTION_CHANNEL_ID = 1300659373227638794  # 自己紹介チャンネルのID
+INTRODUCTION_CHANNEL_ID = 1300659373227638794  # 自己紹介チャンネルのID（実際のIDに置き換えてください）
 
 # 🔧 通知用テキストチャンネルのIDを設定
-NOTIFICATION_CHANNEL_ID = 1331177944244289598  # ここに取得したテキストチャンネルのIDを入力
+NOTIFICATION_CHANNEL_ID = 1331177944244289598  # 通知用テキストチャンネルのID（実際のIDに置き換えてください）
 
 # 🔧 対象のボイスチャンネルIDのリスト
 TARGET_VOICE_CHANNELS = [
@@ -51,18 +57,22 @@ introduction_links = {}
 
 # 💾 リンクをファイルに保存する関数
 def save_links():
-    # introduction_links辞書をJSON形式でファイルに保存
+    """
+    introduction_links辞書をJSON形式でファイルに保存します。
+    """
     with open("introduction_links.json", "w", encoding='utf-8') as f:
         json.dump(introduction_links, f, ensure_ascii=False, indent=4)
 
 # 📥 リンクをファイルから読み込む関数
 def load_links():
+    """
+    introduction_links.jsonファイルからデータを読み込みます。
+    ファイルが存在しない場合は空の辞書を返します。
+    """
     try:
-        # introduction_links.jsonファイルからデータを読み込む
         with open("introduction_links.json", "r", encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        # ファイルが存在しない場合は空の辞書を返す
         return {}
 
 # 🚀 Botが起動したときの処理
@@ -78,11 +88,11 @@ async def on_ready():
 
     # 自己紹介チャンネルを取得
     channel = client.get_channel(INTRODUCTION_CHANNEL_ID)
-
+    
     if channel is None:
         print(f"⚠️ 自己紹介チャンネルが見つかりません: {INTRODUCTION_CHANNEL_ID}")
         return
-
+    
     # 過去のメッセージを最大100件取得
     async for message in channel.history(limit=100):
         if message.author.bot:  # Botのメッセージは無視
@@ -91,7 +101,7 @@ async def on_ready():
         message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
         # ユーザーIDをキーにしてリンクを保存
         introduction_links[str(message.author.id)] = message_link
-
+    
     # リンクを保存
     save_links()
     print(f"📜 過去のメッセージを読み込みました。総リンク数: {len(introduction_links)}")
@@ -103,11 +113,11 @@ async def on_message(message):
     if message.channel.id == INTRODUCTION_CHANNEL_ID and not message.author.bot:
         # メッセージリンクを作成
         message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
-
+        
         # ユーザーIDをキーにしてリンクを保存
         introduction_links[str(message.author.id)] = message_link
         save_links()  # リンクを保存
-
+        
         print(f"📝 {message.author} のリンクを保存: {message_link}")
 
 # 🎧 ボイスチャンネルの状態が変わったときの処理
@@ -122,14 +132,14 @@ async def on_voice_state_update(member, before, after):
             print(f"✅ {member} が対象のボイスチャンネルに参加しました: {after.channel.name} (ID: {voice_channel_id})")
             # 通知用テキストチャンネルを取得
             notify_channel = client.get_channel(NOTIFICATION_CHANNEL_ID)
-
+            
             if notify_channel is None:
                 print(f"⚠️ 通知チャンネルが見つかりません: {NOTIFICATION_CHANNEL_ID}")
                 return
-
+            
             # ユーザーの自己紹介リンクを取得
             user_link = introduction_links.get(str(member.id))
-
+            
             # メッセージを作成
             if user_link:
                 msg = (
@@ -141,10 +151,10 @@ async def on_voice_state_update(member, before, after):
                     f"{member.mention} さんがボイスチャンネル `{after.channel.name}` に参加しました！🎉\n"
                     "❌ 自己紹介がまだありません"
                 )
-
+            
             # メッセージ送信前にログを出力
             print(f"📨 通知メッセージを送信します: {msg}")
-
+            
             # メッセージ送信
             try:
                 await notify_channel.send(msg)
@@ -155,9 +165,6 @@ async def on_voice_state_update(member, before, after):
                 print(f"❌ メッセージ送信中にHTTPエラーが発生しました: {e}")
             except Exception as e:
                 print(f"❌ メッセージ送信中に予期しないエラーが発生しました: {e}")
-
-# 🌐 RenderでBotを常時稼働させるための関数を呼び出す
-# keep_alive()  # コメントアウトまたは削除
 
 # 🔑 TOKENを使ってBotを起動
 token = os.getenv("TOKEN")

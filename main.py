@@ -1,192 +1,135 @@
-import discord  # Discordのライブラリをインポート
-import os  # 環境変数を扱うためのライブラリ
-import json  # JSON形式のデータを扱うためのライブラリ
-from dotenv import load_dotenv  # 環境変数を読み込むためのライブラリ
-from flask import Flask  # Flaskをインポート
-import threading  # スレッドを扱うためのライブラリ
+import discord
+import os
+import threading
+import logging
+from dotenv import load_dotenv
+from flask import Flask
+import database as db  # データベース操作用のファイルをインポート
 
-# 環境変数をロード
+# --- 初期設定 ---
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
-# Flaskアプリケーションのセットアップ
-app = Flask(__name__)
+# --- 環境変数と定数 ---
+TOKEN = os.getenv("TOKEN")
+INTRODUCTION_CHANNEL_ID = 1300659373227638794  # 🚨実際の自己紹介チャンネルIDに要変更
+NOTIFICATION_CHANNEL_ID = 1331177944244289598  # 🚨実際の通知用チャンネルIDに要変更
+TARGET_VOICE_CHANNELS = [
+    1300291307750559754, 1302151049368571925, 1302151154981011486,
+    1306190768431431721, 1306190915483734026
+] # 🚨実際のボイスチャンネルIDリストに要変更
 
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-def run_flask():
-    """
-    Flaskサーバーを指定されたポートで実行します。
-    Render.com は環境変数 'PORT' を使用してポートを指定します。
-    """
-    port = int(os.getenv("PORT", 8080))  # Render.comが指定するポートを取得（デフォルトは8080）
-    app.run(host='0.0.0.0', port=port)
-
-# 別スレッドでFlaskアプリを実行
-flask_thread = threading.Thread(target=run_flask)
-flask_thread.start()
-
-# 🔧 Botの権限設定
-intents = discord.Intents.default()  # デフォルトの権限を設定
-intents.voice_states = True  # ボイスチャンネルの状態を監視する権限
-intents.messages = True  # メッセージを読み取る権限
-intents.message_content = True  # メッセージの内容を読み取る権限（重要！）
-intents.members = True  # メンバー情報を読み取る権限
-
-# Discordクライアントを作成
+# --- Discord Botの準備 ---
+intents = discord.Intents.default()
+intents.voice_states = True
+intents.messages = True
+intents.message_content = True
+intents.members = True # メンバー情報を取得するために必要
 client = discord.Client(intents=intents)
 
-# 🔧 自己紹介チャンネルのIDを設定
-INTRODUCTION_CHANNEL_ID = 1300659373227638794  # 自己紹介チャンネルのID（実際のIDに置き換えてください）
+# --- スリープ対策Webサーバーの準備 ---
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Self-Introduction Bot is running!"
+def run_flask():
+    port = int(os.getenv("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
-# 🔧 通知用テキストチャンネルのIDを設定
-NOTIFICATION_CHANNEL_ID = 1331177944244289598  # 通知用テキストチャンネルのID（実際のIDに置き換えてください）
+# --- Botのイベント処理 ---
 
-# 🔧 対象のボイスチャンネルIDのリスト
-TARGET_VOICE_CHANNELS = [
-    1300291307750559754,  # ボイスチャンネル1のID
-    1302151049368571925,  # ボイスチャンネル2のID
-    1302151154981011486,  # ボイスチャンネル3のID
-    1306190768431431721,  # ボイスチャンネル4のID
-    1306190915483734026,  # ボイスチャンネル5のID
-]
-
-# 📂 自己紹介リンクを保存する辞書
-introduction_links = {}
-
-# 💾 リンクをファイルに保存する関数
-def save_links():
-    """
-    introduction_links辞書をJSON形式でファイルに保存します。
-    """
-    try:
-        with open("introduction_links.json", "w", encoding='utf-8') as f:
-            json.dump(introduction_links, f, ensure_ascii=False, indent=4)
-        print("✅ introduction_links.json にリンクを保存しました。")
-    except Exception as e:
-        print(f"❌ リンクの保存中にエラーが発生しました: {e}")
-
-# 📥 リンクをファイルから読み込む関数
-def load_links():
-    """
-    introduction_links.jsonファイルからデータを読み込みます。
-    ファイルが存在しない場合は空の辞書を返します。
-    """
-    try:
-        with open("introduction_links.json", "r", encoding='utf-8') as f:
-            print("✅ introduction_links.json を読み込みました。")
-            return json.load(f)
-    except FileNotFoundError:
-        print("⚠️ introduction_links.json が存在しません。新規作成します。")
-        return {}
-    except json.JSONDecodeError as e:
-        print(f"❌ introduction_links.json の読み込み中にJSONエラーが発生しました: {e}")
-        return {}
-    except Exception as e:
-        print(f"❌ introduction_links.json の読み込み中にエラーが発生しました: {e}")
-        return {}
-
-# 🚀 Botが起動したときの処理
 @client.event
 async def on_ready():
-    global introduction_links
-    # 起動時にリンクを読み込む
-    introduction_links = load_links()
-    print(f'✅ Botがログインしました: {client.user}')
-    print(f"📜 読み込まれたリンク数: {len(introduction_links)}")
-    print(f"📢 監視対象ボイスチャンネル: {TARGET_VOICE_CHANNELS}")
-    print(f"📢 通知用テキストチャンネル: {NOTIFICATION_CHANNEL_ID}")
+    logging.info(f"✅ Botがログインしました: {client.user}")
+    
+    try:
+        # 1. データベースを初期化（テーブルがなければ作る）
+        await db.init_intro_bot_db()
+        logging.info("✅ データベースを初期化しました。")
 
-    # 自己紹介チャンネルを取得
-    channel = client.get_channel(INTRODUCTION_CHANNEL_ID)
-    
-    if channel is None:
-        print(f"⚠️ 自己紹介チャンネルが見つかりません: {INTRODUCTION_CHANNEL_ID}")
-        return
-    
-    # 過去のメッセージを最大1000件取得（必要に応じて増やしてください）
-    async for message in channel.history(limit=1000):
-        if message.author.bot:  # Botのメッセージは無視
-            continue
-        # メッセージリンクを生成
-        message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
-        # ユーザーIDをキーにしてリンクを保存
-        introduction_links[str(message.author.id)] = message_link
-    
-    # リンクを保存
-    save_links()
-    print(f"📜 過去のメッセージを読み込みました。総リンク数: {len(introduction_links)}")
+        # 2. 過去の自己紹介メッセージをスキャンしてDBに保存
+        intro_channel = client.get_channel(INTRODUCTION_CHANNEL_ID)
+        if intro_channel:
+            logging.info("📜 過去の自己紹介をスキャン中...")
+            count = 0
+            async for message in intro_channel.history(limit=2000): # 取得件数を増やすことも可能
+                if not message.author.bot:
+                    message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+                    await db.save_intro_link(message.author.id, message_link)
+                    count += 1
+            logging.info(f"📜 スキャン完了。{count}件の自己紹介をDBに保存/更新しました。")
+        else:
+            logging.error(f"❌ 自己紹介チャンネル(ID: {INTRODUCTION_CHANNEL_ID})が見つかりません。")
 
-# 💬 メッセージが送信されたときの処理
+    except Exception as e:
+        logging.error(f"❌ 起動処理中にエラーが発生しました: {e}", exc_info=True)
+
+
 @client.event
 async def on_message(message):
-    # 自己紹介チャンネルでのみ反応
+    # 自己紹介チャンネルに投稿された、Bot以外のメッセージを処理
     if message.channel.id == INTRODUCTION_CHANNEL_ID and not message.author.bot:
-        # メッセージリンクを作成
-        message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
-        
-        # ユーザーIDをキーにしてリンクを保存
-        introduction_links[str(message.author.id)] = message_link
-        save_links()  # リンクを保存
-        
-        print(f"📝 {message.author} のリンクを保存: {message_link}")
+        try:
+            message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+            # データベースにリンクを保存
+            await db.save_intro_link(message.author.id, message_link)
+            logging.info(f"📝 {message.author} の新しい自己紹介をDBに保存しました。")
+        except Exception as e:
+            logging.error(f"❌ on_messageでのDB保存中にエラー: {e}", exc_info=True)
 
-# 🎧 ボイスチャンネルの状態が変わったときの処理
+
 @client.event
 async def on_voice_state_update(member, before, after):
-    print(f"🔄 Voice state updated: {member} - before: {before.channel}, after: {after.channel}")
-    # ボイスチャンネルに入室したときのみ反応
+    # ボイスチャンネルに「入室」した時だけ反応
     if before.channel is None and after.channel is not None:
-        voice_channel_id = after.channel.id
         # 対象のボイスチャンネルか確認
-        if voice_channel_id in TARGET_VOICE_CHANNELS:
-            print(f"✅ {member} が対象のボイスチャンネルに参加しました: {after.channel.name} (ID: {voice_channel_id})")
-            # 通知用テキストチャンネルを取得
-            notify_channel = client.get_channel(NOTIFICATION_CHANNEL_ID)
+        if after.channel.id in TARGET_VOICE_CHANNELS:
+            logging.info(f"🔊 {member} がボイスチャンネル '{after.channel.name}' に参加しました。")
             
-            if notify_channel is None:
-                print(f"⚠️ 通知チャンネルが見つかりません: {NOTIFICATION_CHANNEL_ID}")
+            notify_channel = client.get_channel(NOTIFICATION_CHANNEL_ID)
+            if not notify_channel:
+                logging.error(f"❌ 通知チャンネル(ID: {NOTIFICATION_CHANNEL_ID})が見つかりません。")
                 return
             
-            # ユーザーの自己紹介リンクを取得
-            user_link = introduction_links.get(str(member.id))
-            
-            # メッセージを作成
-            if user_link:
-                msg = (
-                    f"{member.display_name} さんが`{after.channel.name}` に入室しました！\n"
-                    f"📌 自己紹介はこちら → {user_link}"
-                )
-                print(f"📨 {member} の自己紹介リンクを見つけました: {user_link}")
-            else:
-                msg = (
-                    f"{member.display_name} さんが`{after.channel.name}` に入室しました！\n"
-                    "❌ 自己紹介がまだありません"
-                )
-                print(f"⚠️ {member} の自己紹介リンクが見つかりません。")
-            
-            # メッセージ送信前にログを出力
-            print(f"📨 通知メッセージを送信します: {msg}")
-            
-            # メッセージ送信
             try:
+                # データベースからユーザーの自己紹介リンクを取得
+                user_link = await db.load_intro_link(member.id)
+                
+                if user_link:
+                    msg = (
+                        f"{member.display_name} さんが`{after.channel.name}` に入室しました！\n"
+                        f"📌 自己紹介はこちら → {user_link}"
+                    )
+                else:
+                    msg = (
+                        f"{member.display_name} さんが`{after.channel.name}` に入室しました！\n"
+                        "⚠️ この方の自己紹介はまだ投稿されていません。"
+                    )
+                
                 await notify_channel.send(msg)
-                print(f"✅ {member} の入室通知を送信しました。")
-            except discord.Forbidden:
-                print(f"❌ Botが通知チャンネルにメッセージを送信する権限がありません: {NOTIFICATION_CHANNEL_ID}")
-            except discord.HTTPException as e:
-                print(f"❌ メッセージ送信中にHTTPエラーが発生しました: {e}")
+                logging.info(f"✅ {member.display_name} さんの入室通知を送信しました。")
+
             except Exception as e:
-                print(f"❌ メッセージ送信中に予期しないエラーが発生しました: {e}")
+                logging.error(f"❌ 通知メッセージ送信中にエラー: {e}", exc_info=True)
 
-# 🔑 TOKENを使ってBotを起動
-token = os.getenv("TOKEN")
-if not token:
-    print("❌ TOKENが設定されていません。環境変数を確認してください。")
-    exit()
 
-try:
-    client.run(token)
-except Exception as e:
-    print(f"❌ Botの起動中にエラーが発生しました: {e}")
+# --- 起動処理 ---
+def main():
+    # Webサーバーを別スレッドで起動
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+    
+    # Botを起動
+    if not TOKEN:
+        logging.error("❌ TOKENが設定されていません！.envファイルを確認してください。")
+        return
+        
+    try:
+        client.run(TOKEN)
+    except discord.errors.LoginFailure:
+        logging.error("❌ TOKENが不正です。Discord Developer Portalでトークンを確認してください。")
+    except Exception as e:
+        logging.error(f"❌ Botの起動に失敗しました: {e}", exc_info=True)
+
+if __name__ == "__main__":
+    main()

@@ -32,9 +32,10 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     return "Self-Introduction Bot is running!"
-def run_flask():
-    port = int(os.getenv("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+
+@app.route('/health')
+def health_check():
+    return "OK", 200
 
 # --- Botのイベント処理 ---
 

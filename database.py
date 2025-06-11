@@ -124,7 +124,6 @@ async def init_intro_bot_db():
     await pool.close()
 
 async def save_intro_link(user_id, message_link):
-    """ユーザーの自己紹介リンクを保存または更新する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         await connection.execute('''
@@ -134,9 +133,101 @@ async def save_intro_link(user_id, message_link):
     await pool.close()
 
 async def load_intro_link(user_id):
-    """指定したユーザーの自己紹介リンクを1つだけ読み込む"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         record = await connection.fetchrow("SELECT message_link FROM introduction_links WHERE user_id = $1", user_id)
     await pool.close()
     return record['message_link'] if record else None
+
+
+# --- 守護神ボット用の関数 ---
+
+async def init_shugoshin_db():
+    """守護神ボット専用のテーブルを作成する"""
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        # 通報情報を保存するテーブル
+        await connection.execute('''
+            CREATE TABLE IF NOT EXISTS reports (
+                report_id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                message_id BIGINT,
+                target_user_id BIGINT NOT NULL,
+                violated_rule TEXT NOT NULL,
+                details TEXT,
+                message_link TEXT,
+                urgency TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT '未対応',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        ''')
+    await pool.close()
+
+async def create_report(guild_id, target_user_id, violated_rule, details, message_link, urgency):
+    """新しい通報をDBに保存し、報告IDを返す"""
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        report_id = await connection.fetchval(
+            '''INSERT INTO reports (guild_id, target_user_id, violated_rule, details, message_link, urgency) 
+               VALUES ($1, $2, $3, $4, $5, $6) RETURNING report_id''',
+            guild_id, target_user_id, violated_rule, details, message_link, urgency
+        )
+    await pool.close()
+    return report_id
+
+async def update_report_message_id(report_id, message_id):
+    """報告メッセージのIDをDBに保存する"""
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        await connection.execute(
+            "UPDATE reports SET message_id = $1 WHERE report_id = $2",
+            message_id, report_id
+        )
+    await pool.close()
+
+async def update_report_status(report_id, new_status):
+    """指定された報告IDのステータスを更新する"""
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        await connection.execute(
+            "UPDATE reports SET status = $1 WHERE report_id = $2",
+            new_status, report_id
+        )
+    await pool.close()
+
+async def get_report(report_id):
+    """指定された報告IDの情報を取得する"""
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        record = await connection.fetchrow("SELECT * FROM reports WHERE report_id = $1", report_id)
+    await pool.close()
+    return record
+
+async def list_reports(status_filter=None):
+    """条件に合う報告のリストを取得する"""
+    pool = await get_pool()
+    query = "SELECT report_id, target_user_id, status FROM reports"
+    params = []
+    
+    if status_filter and status_filter != 'all':
+        query += " WHERE status = $1"
+        params.append(status_filter)
+        
+    query += " ORDER BY report_id DESC LIMIT 20"
+    
+    async with pool.acquire() as connection:
+        records = await connection.fetch(query, *params)
+    await pool.close()
+    return records
+
+async def get_report_stats():
+    """報告の統計情報を取得する"""
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        stats = await connection.fetch('''
+            SELECT status, COUNT(*) as count 
+            FROM reports 
+            GROUP BY status
+        ''')
+    await pool.close()
+    return {row['status']: row['count'] for row in stats}

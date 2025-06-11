@@ -1,4 +1,5 @@
 import discord
+from discord import ui # ボタンのためにインポート
 import os
 import threading
 import logging
@@ -32,7 +33,7 @@ client = discord.Client(intents=intents)
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return "Self-Introduction Bot is running!"
+    return "Self-Introduction Bot v2 is running!"
 @app.route('/health')
 def health_check():
     return "OK"
@@ -46,7 +47,7 @@ def run_flask():
 async def on_ready():
     logging.info(f"✅ Botがログインしました: {client.user}")
     try:
-        # 正しい関数名でDBを初期化
+        # 新しいDB初期化関数を呼び出す
         await db.init_intro_bot_db()
         logging.info("✅ データベースを初期化しました。")
 
@@ -54,11 +55,10 @@ async def on_ready():
         if intro_channel:
             logging.info(f"📜 過去の自己紹介をスキャン中 (チャンネル: {intro_channel.name})...")
             count = 0
-            # 過去ログをスキャンしてDBに保存
+            # 過去ログをスキャンして、チャンネルIDとメッセージIDをDBに保存
             async for message in intro_channel.history(limit=2000):
                 if not message.author.bot:
-                    message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
-                    await db.save_intro_link(message.author.id, message_link)
+                    await db.save_intro(message.author.id, message.channel.id, message.id)
                     count += 1
             logging.info(f"📜 スキャン完了。{count}件の自己紹介をDBに保存/更新しました。")
         else:
@@ -69,11 +69,10 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # 自己紹介チャンネルでの投稿をDBに保存
+    # 自己紹介チャンネルでの投稿を、チャンネルIDとメッセージIDでDBに保存
     if message.channel.id == INTRODUCTION_CHANNEL_ID and not message.author.bot:
         try:
-            message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
-            await db.save_intro_link(message.author.id, message_link)
+            await db.save_intro(message.author.id, message.channel.id, message.id)
             logging.info(f"📝 {message.author} の新しい自己紹介をDBに保存しました。")
         except Exception as e:
             logging.error(f"❌ on_messageでのDB保存中にエラー: {e}", exc_info=True)
@@ -91,23 +90,45 @@ async def on_voice_state_update(member, before, after):
             return
             
         try:
-            # DBから自己紹介リンクを取得
-            user_link = await db.load_intro_link(member.id)
+            # DBからチャンネルIDとメッセージIDを取得
+            intro_ids = await db.get_intro_ids(member.id)
             
-            if user_link:
-                msg = (
-                    f"{member.display_name} さんが`{after.channel.name}` に入室しました！\n"
-                    f"📌 自己紹介はこちら → {user_link}"
+            if intro_ids:
+                # IDを元に、実際のメッセージを取得しにいく
+                intro_channel = client.get_channel(intro_ids['channel_id'])
+                intro_message = await intro_channel.fetch_message(intro_ids['message_id'])
+                
+                # カッコいい埋め込みメッセージを作成
+                embed = discord.Embed(
+                    description=intro_message.content, # メッセージ内容をそのまま表示！
+                    color=discord.Color.blue()
                 )
+                embed.set_author(name=f"{member.display_name}さんの自己紹介", icon_url=member.display_avatar.url)
+                
+                # 「メッセージに移動」ボタンも付ける
+                view = ui.View()
+                button = ui.Button(label="元の自己紹介へ移動", style=discord.ButtonStyle.link, url=intro_message.jump_url)
+                view.add_item(button)
+
+                await notify_channel.send(f"**{member.display_name}** さんが`{after.channel.name}` に入室しました！", embed=embed, view=view)
+
             else:
+                # 自己紹介がない場合
                 msg = (
-                    f"{member.display_name} さんが`{after.channel.name}` に入室しました！\n"
+                    f"**{member.display_name}** さんが`{after.channel.name}` に入室しました！\n"
                     "⚠️ この方の自己紹介はまだ投稿されていません。"
                 )
+                await notify_channel.send(msg)
             
-            await notify_channel.send(msg)
             logging.info(f"✅ {member.display_name} さんの入室通知を送信しました。")
 
+        except discord.NotFound:
+            logging.warning(f"⚠️ {member.name}さんの自己紹介メッセージが見つかりませんでした(削除されたかも)。")
+            msg = (
+                f"**{member.display_name}** さんが`{after.channel.name}` に入室しました！\n"
+                "⚠️ 自己紹介メッセージが見つかりませんでした（削除された可能性があります）。"
+            )
+            await notify_channel.send(msg)
         except Exception as e:
             logging.error(f"❌ 通知メッセージ送信中にエラー: {e}", exc_info=True)
 

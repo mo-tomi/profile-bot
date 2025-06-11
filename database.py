@@ -107,33 +107,41 @@ async def get_total_bumps():
     return total or 0
 
 
-# --- 自己紹介Bot用の関数 ---
+# --- 自己紹介Bot用の関数 (v2仕様) ---
 async def init_intro_bot_db():
+    """自己紹介Bot専用のテーブルを作成する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
+        # メッセージリンクの代わりに、チャンネルIDとメッセージIDを保存する
         await connection.execute('''
-            CREATE TABLE IF NOT EXISTS introduction_links (
+            CREATE TABLE IF NOT EXISTS introductions (
                 user_id BIGINT PRIMARY KEY,
-                message_link TEXT NOT NULL
+                channel_id BIGINT NOT NULL,
+                message_id BIGINT NOT NULL
             );
         ''')
     await pool.close()
 
-async def save_intro_link(user_id, message_link):
+async def save_intro(user_id, channel_id, message_id):
+    """ユーザーの自己紹介IDを保存または更新する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         await connection.execute('''
-            INSERT INTO introduction_links (user_id, message_link) VALUES ($1, $2)
-            ON CONFLICT (user_id) DO UPDATE SET message_link = $2;
-        ''', user_id, message_link)
+            INSERT INTO introductions (user_id, channel_id, message_id) VALUES ($1, $2, $3)
+            ON CONFLICT (user_id) DO UPDATE SET channel_id = $2, message_id = $3;
+        ''', user_id, channel_id, message_id)
     await pool.close()
 
-async def load_intro_link(user_id):
+async def get_intro_ids(user_id):
+    """指定したユーザーの自己紹介IDセットを取得する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
-        record = await connection.fetchrow("SELECT message_link FROM introduction_links WHERE user_id = $1", user_id)
+        # channel_id と message_id の両方を返す
+        record = await connection.fetchrow(
+            "SELECT channel_id, message_id FROM introductions WHERE user_id = $1", user_id
+        )
     await pool.close()
-    return record['message_link'] if record else None
+    return record # 存在しない場合はNoneが返る
 
 
 # --- 守護神ボット用の関数 ---

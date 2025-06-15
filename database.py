@@ -146,6 +146,7 @@ async def get_intro_ids(user_id):
 
 # --- 守護神ボット用の関数 ---
 async def init_shugoshin_db():
+    """守護神ボット専用のテーブルを作成する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         await connection.execute('''
@@ -172,6 +173,7 @@ async def init_shugoshin_db():
     await pool.close()
 
 async def setup_guild(guild_id, report_channel_id, urgent_role_id):
+    """サーバー設定をDBに保存または更新する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         await connection.execute('''
@@ -183,6 +185,7 @@ async def setup_guild(guild_id, report_channel_id, urgent_role_id):
     await pool.close()
 
 async def get_guild_settings(guild_id):
+    """サーバー設定をDBから取得する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         settings = await connection.fetchrow(
@@ -193,6 +196,7 @@ async def get_guild_settings(guild_id):
     return settings
 
 async def check_cooldown(user_id, cooldown_seconds):
+    """クールダウン中か確認し、そうでなければ時刻を更新する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         async with connection.transaction():
@@ -203,15 +207,16 @@ async def check_cooldown(user_id, cooldown_seconds):
             if record:
                 time_since_last = now - record['last_report_at']
                 if time_since_last.total_seconds() < cooldown_seconds:
-                    return cooldown_seconds - time_since_last.total_seconds()
+                    return cooldown_seconds - time_since_last.total_seconds() # 残り時間を返す
             await connection.execute('''
                 INSERT INTO report_cooldowns (user_id, last_report_at) VALUES ($1, $2)
                 ON CONFLICT (user_id) DO UPDATE SET last_report_at = $2;
             ''', user_id, now)
-            return 0
+            return 0 # クールダウン中でない
     await pool.close()
 
 async def create_report(guild_id, target_user_id, violated_rule, details, message_link, urgency):
+    """新しい通報をDBに保存し、報告IDを返す"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         report_id = await connection.fetchval(
@@ -223,6 +228,7 @@ async def create_report(guild_id, target_user_id, violated_rule, details, messag
     return report_id
 
 async def update_report_message_id(report_id, message_id):
+    """報告メッセージのIDをDBに保存する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         await connection.execute(
@@ -232,6 +238,7 @@ async def update_report_message_id(report_id, message_id):
     await pool.close()
 
 async def update_report_status(report_id, new_status):
+    """指定された報告IDのステータスを更新する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         await connection.execute(
@@ -241,6 +248,7 @@ async def update_report_status(report_id, new_status):
     await pool.close()
 
 async def get_report(report_id):
+    """指定された報告IDの情報を取得する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         record = await connection.fetchrow("SELECT * FROM reports WHERE report_id = $1", report_id)
@@ -248,6 +256,7 @@ async def get_report(report_id):
     return record
 
 async def list_reports(status_filter=None):
+    """条件に合う報告のリストを取得する"""
     pool = await get_pool()
     query = "SELECT report_id, target_user_id, status FROM reports"
     params = []
@@ -261,6 +270,7 @@ async def list_reports(status_filter=None):
     return records
 
 async def get_report_stats():
+    """報告の統計情報を取得する"""
     pool = await get_pool()
     async with pool.acquire() as connection:
         stats = await connection.fetch('''

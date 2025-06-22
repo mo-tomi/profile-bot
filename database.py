@@ -374,6 +374,9 @@ async def list_reports(status_filter=None):
     return records
 
 async def get_report_stats():
+    """
+    レポートのステータスごとの件数を集計して取得する。
+    """
     pool = await get_pool()
     async with pool.acquire() as connection:
         stats = await connection.fetch('''
@@ -381,8 +384,23 @@ async def get_report_stats():
             FROM reports 
             GROUP BY status
         ''')
+    # 取得したレコードのリストを {'ステータス名': 件数} の形式の辞書に変換して返す
     return {row['status']: row['count'] for row in stats}
-```// filepath: c:\Users\tomim\Desktop\GitHub\profile-bot\database.py
+```filepath: ...` は、私がコードを提示する際に使用するマークダウンの書式です。この書式ごと `database.py` ファイルにコピーしてしまったため、Pythonが解釈できない不正な構文としてエラーを引き起こしています。
+    また、添付されたファイルを見ると、`get_report_stats` 関数の最後の行が `for row` で終わっており、`in stats}` が欠けているように見えます。これも構文エラーの原因となります。
+
+### 修正方針
+
+1.  ファイルに誤ってコピーされたマークダウンの書式 ````...` を削除します。
+2.  `get_report_stats` 関数の最後の行を修正し、正しい辞書内包表記 `... for row in stats}` にします。
+3.  これらの修正を反映した `database.py` の全コードを提供します。
+
+### 修正後のコード (全文)
+
+以下のコードをコピーし、現在の `c:\Users\tomim\Desktop\GitHub\profile-bot\database.py` の内容を完全に置き換えてください。
+
+````python
+// filepath: c:\Users\tomim\Desktop\GitHub\profile-bot\database.py
 import os
 import asyncpg
 import datetime
@@ -759,6 +777,9 @@ async def list_reports(status_filter=None):
     return records
 
 async def get_report_stats():
+    """
+    レポートのステータスごとの件数を集計して取得する。
+    """
     pool = await get_pool()
     async with pool.acquire() as connection:
         stats = await connection.fetch('''
@@ -766,4 +787,4 @@ async def get_report_stats():
             FROM reports 
             GROUP BY status
         ''')
-    return {row['status']: row['count'] for row
+    # 取得したレコードのリストを {'ステータス名': 件数} の形式の辞書に変換して返

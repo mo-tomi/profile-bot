@@ -147,21 +147,6 @@ async def init_intro_bot_db():
     """
     pool = await get_pool()
     async with pool.acquire() as connection:
-        # [変更前のコード]
-        # CREATE TABLE IF NOT EXISTS のみだったため、既にテーブルが存在し、
-        # かつそのテーブルに 'created_at' カラムがない場合にエラーが発生していた。
-        #
-        # [変更後のコード]
-        # 1. まず、最新のスキーマでテーブル作成を試みる (IF NOT EXISTS)。
-        # 2. 次に、'created_at' カラムが存在するかを明示的にチェックする。
-        # 3. もし存在しなければ、ALTER TABLE を使ってカラムを追加する。
-        #
-        # [変更理由]
-        # RenderからSupabaseへの移行など、異なる環境で作成された古いデータベースに接続した際に、
-        # 'column "created_at" does not exist' というエラーが発生する問題を解決するため。
-        # この修正により、Bot起動時にデータベースのテーブル構造が自動的に更新され、
-        # エラーを未然に防ぐことができる（自己修復機能）。
-
         # 1. テーブルが存在しない場合に備えて、最新の定義で作成を試みる
         await connection.execute('''
             CREATE TABLE IF NOT EXISTS introductions (
@@ -386,21 +371,7 @@ async def get_report_stats():
         ''')
     # 取得したレコードのリストを {'ステータス名': 件数} の形式の辞書に変換して返す
     return {row['status']: row['count'] for row in stats}
-```filepath: ...` は、私がコードを提示する際に使用するマークダウンの書式です。この書式ごと `database.py` ファイルにコピーしてしまったため、Pythonが解釈できない不正な構文としてエラーを引き起こしています。
-    また、添付されたファイルを見ると、`get_report_stats` 関数の最後の行が `for row` で終わっており、`in stats}` が欠けているように見えます。これも構文エラーの原因となります。
-
-### 修正方針
-
-1.  ファイルに誤ってコピーされたマークダウンの書式 ````...` を削除します。
-2.  `get_report_stats` 関数の最後の行を修正し、正しい辞書内包表記 `... for row in stats}` にします。
-3.  これらの修正を反映した `database.py` の全コードを提供します。
-
-### 修正後のコード (全文)
-
-以下のコードをコピーし、現在の `c:\Users\tomim\Desktop\GitHub\profile-bot\database.py` の内容を完全に置き換えてください。
-
-````python
-// filepath: c:\Users\tomim\Desktop\GitHub\profile-bot\database.py
+```// filepath: c:\Users\tomim\Desktop\GitHub\profile-bot\database.py
 import os
 import asyncpg
 import datetime
@@ -550,21 +521,6 @@ async def init_intro_bot_db():
     """
     pool = await get_pool()
     async with pool.acquire() as connection:
-        # [変更前のコード]
-        # CREATE TABLE IF NOT EXISTS のみだったため、既にテーブルが存在し、
-        # かつそのテーブルに 'created_at' カラムがない場合にエラーが発生していた。
-        #
-        # [変更後のコード]
-        # 1. まず、最新のスキーマでテーブル作成を試みる (IF NOT EXISTS)。
-        # 2. 次に、'created_at' カラムが存在するかを明示的にチェックする。
-        # 3. もし存在しなければ、ALTER TABLE を使ってカラムを追加する。
-        #
-        # [変更理由]
-        # RenderからSupabaseへの移行など、異なる環境で作成された古いデータベースに接続した際に、
-        # 'column "created_at" does not exist' というエラーが発生する問題を解決するため。
-        # この修正により、Bot起動時にデータベースのテーブル構造が自動的に更新され、
-        # エラーを未然に防ぐことができる（自己修復機能）。
-
         # 1. テーブルが存在しない場合に備えて、最新の定義で作成を試みる
         await connection.execute('''
             CREATE TABLE IF NOT EXISTS introductions (

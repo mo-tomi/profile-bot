@@ -1,18 +1,32 @@
 import os
 import asyncpg
 import datetime
+import logging
 
-# ### 共通で使う道具（関数） ###
 DATABASE_URL = os.environ.get('DATABASE_URL')
+_pool = None
 
 async def get_pool():
-    if not DATABASE_URL:
-        raise ValueError("DATABASE_URL environment variable is not set.")
-    return await asyncpg.create_pool(DATABASE_URL)
-# #################################
+    global _pool
+    if _pool is None or _pool._closed:
+        if not DATABASE_URL:
+            raise ValueError("DATABASE_URL environment variable is not set.")
+        _pool = await asyncpg.create_pool(
+            DATABASE_URL,
+            min_size=1,
+            max_size=10,
+            command_timeout=30
+        )
+        logging.info("✅ 新しいデータベース接続プールを作成しました")
+    return _pool
 
+async def close_pool():
+    global _pool
+    if _pool and not _pool._closed:
+        await _pool.close()
+        _pool = None
+        logging.info("✅ データベース接続プールを閉じました")
 
-# --- BUMPくん用の関数 ---
 async def init_db():
     pool = await get_pool()
     async with pool.acquire() as connection:
@@ -22,8 +36,6 @@ async def init_db():
                 bump_count INTEGER NOT NULL DEFAULT 0
             );
         ''')
-        # --- 修正箇所 1 ---
-        # remindersテーブルに、リマインダーの状態を保存する status カラムを追加
         await connection.execute('''
             CREATE TABLE IF NOT EXISTS reminders (
                 id SERIAL PRIMARY KEY,
@@ -42,20 +54,18 @@ async def init_db():
             INSERT INTO settings (key, value) VALUES ('scan_completed', 'false')
             ON CONFLICT (key) DO NOTHING;
         ''')
-    await pool.close()
+    logging.info("✅ BUMPくん用テーブルを初期化しました")
 
 async def is_scan_completed():
     pool = await get_pool()
     async with pool.acquire() as connection:
         record = await connection.fetchrow("SELECT value FROM settings WHERE key = 'scan_completed'")
-    await pool.close()
     return record and record['value'] == 'true'
 
 async def mark_scan_as_completed():
     pool = await get_pool()
     async with pool.acquire() as connection:
         await connection.execute("UPDATE settings SET value = 'true' WHERE key = 'scan_completed'")
-    await pool.close()
 
 async def record_bump(user_id):
     pool = await get_pool()
@@ -65,75 +75,54 @@ async def record_bump(user_id):
             ON CONFLICT (user_id) DO UPDATE SET bump_count = users.bump_count + 1;
         ''', user_id)
         count = await connection.fetchval('SELECT bump_count FROM users WHERE user_id = $1', user_id)
-    await pool.close()
     return count
 
-# --- 修正箇所 2 ---
-# limit引数を追加して、取得する人数を指定できるようにする
 async def get_top_users(limit=5):
     pool = await get_pool()
     async with pool.acquire() as connection:
-        # LIMIT句で$1プレースホルダを使い、引数のlimit値で件数を指定
         records = await connection.fetch(
             'SELECT user_id, bump_count FROM users ORDER BY bump_count DESC LIMIT $1', limit
         )
-    await pool.close()
     return records
 
 async def get_user_count(user_id):
     pool = await get_pool()
     async with pool.acquire() as connection:
         count = await connection.fetchval('SELECT bump_count FROM users WHERE user_id = $1', user_id)
-    await pool.close()
     return count or 0
 
 async def set_reminder(channel_id, remind_time):
-    # この関数は、新しいテーブル定義のおかげで修正不要
-    # status は DEFAULT 'waiting' で自動的にセットされる
     pool = await get_pool()
     async with pool.acquire() as connection:
         await connection.execute('DELETE FROM reminders')
         await connection.execute('INSERT INTO reminders (channel_id, remind_at) VALUES ($1, $2)', channel_id, remind_time)
-    await pool.close()
 
-# --- 修正箇所 3 ---
-# 取得するデータに status を追加
 async def get_reminder():
     pool = await get_pool()
     async with pool.acquire() as connection:
         record = await connection.fetchrow(
             'SELECT channel_id, remind_at, status FROM reminders ORDER BY remind_at LIMIT 1'
         )
-    await pool.close()
     return record
 
-# --- 修正箇所 4 ---
-# 新しい関数を追加して、リマインダーの状態を更新できるようにする
 async def update_reminder_status(channel_id, new_status):
     pool = await get_pool()
     async with pool.acquire() as connection:
-        # channel_idをキーにしてステータスを更新する
         await connection.execute(
             'UPDATE reminders SET status = $1 WHERE channel_id = $2', new_status, channel_id
         )
-    await pool.close()
 
 async def clear_reminder():
     pool = await get_pool()
     async with pool.acquire() as connection:
         await connection.execute('DELETE FROM reminders')
-    await pool.close()
 
 async def get_total_bumps():
     pool = await get_pool()
     async with pool.acquire() as connection:
         total = await connection.fetchval('SELECT SUM(bump_count) FROM users')
-    await pool.close()
     return total or 0
 
-
-# --- 自己紹介Bot用の関数 (v2仕様) ---
-# このセクションは変更ありません
 async def init_intro_bot_db():
     pool = await get_pool()
     async with pool.acquire() as connection:
@@ -141,19 +130,31 @@ async def init_intro_bot_db():
             CREATE TABLE IF NOT EXISTS introductions (
                 user_id BIGINT PRIMARY KEY,
                 channel_id BIGINT NOT NULL,
-                message_id BIGINT NOT NULL
+                message_id BIGINT NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         ''')
-    await pool.close()
+        await connection.execute('''
+            CREATE INDEX IF NOT EXISTS idx_introductions_user_id ON introductions(user_id);
+        ''')
+    logging.info("✅ 自己紹介Bot用テーブルを初期化しました")
 
 async def save_intro(user_id, channel_id, message_id):
     pool = await get_pool()
     async with pool.acquire() as connection:
+        existing = await connection.fetchrow(
+            "SELECT user_id FROM introductions WHERE user_id = $1", user_id
+        )
+        
         await connection.execute('''
             INSERT INTO introductions (user_id, channel_id, message_id) VALUES ($1, $2, $3)
-            ON CONFLICT (user_id) DO UPDATE SET channel_id = $2, message_id = $3;
+            ON CONFLICT (user_id) DO UPDATE SET channel_id = $2, message_id = $3, created_at = CURRENT_TIMESTAMP;
         ''', user_id, channel_id, message_id)
-    await pool.close()
+        
+        if existing:
+            logging.info(f"🔄 自己紹介を更新: User {user_id}")
+        else:
+            logging.info(f"🆕 新しい自己紹介を保存: User {user_id}")
 
 async def get_intro_ids(user_id):
     pool = await get_pool()
@@ -161,12 +162,29 @@ async def get_intro_ids(user_id):
         record = await connection.fetchrow(
             "SELECT channel_id, message_id FROM introductions WHERE user_id = $1", user_id
         )
-    await pool.close()
+    
+    if record:
+        logging.info(f"✅ 自己紹介発見: User {user_id} -> Channel {record['channel_id']}, Message {record['message_id']}")
+    else:
+        logging.info(f"❌ 自己紹介未発見: User {user_id}")
+    
     return record
 
+async def get_intro_count():
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        count = await connection.fetchval("SELECT COUNT(*) FROM introductions")
+    return count or 0
 
-# --- 守護神ボット用の関数 ---
-# このセクションは変更ありません
+async def list_recent_intros(limit=10):
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        records = await connection.fetch(
+            "SELECT user_id, channel_id, message_id, created_at FROM introductions ORDER BY created_at DESC LIMIT $1",
+            limit
+        )
+    return records
+
 async def init_shugoshin_db():
     pool = await get_pool()
     async with pool.acquire() as connection:
@@ -191,7 +209,7 @@ async def init_shugoshin_db():
                 last_report_at TIMESTAMP WITH TIME ZONE NOT NULL
             );
         ''')
-    await pool.close()
+    logging.info("✅ 守護神ボット用テーブルを初期化しました")
 
 async def setup_guild(guild_id, report_channel_id, urgent_role_id):
     pool = await get_pool()
@@ -202,7 +220,6 @@ async def setup_guild(guild_id, report_channel_id, urgent_role_id):
             ON CONFLICT (guild_id) DO UPDATE
             SET report_channel_id = $2, urgent_role_id = $3;
         ''', guild_id, report_channel_id, urgent_role_id)
-    await pool.close()
 
 async def get_guild_settings(guild_id):
     pool = await get_pool()
@@ -211,7 +228,6 @@ async def get_guild_settings(guild_id):
             "SELECT report_channel_id, urgent_role_id FROM guild_settings WHERE guild_id = $1",
             guild_id
         )
-    await pool.close()
     return settings
 
 async def check_cooldown(user_id, cooldown_seconds):
@@ -231,7 +247,6 @@ async def check_cooldown(user_id, cooldown_seconds):
                 ON CONFLICT (user_id) DO UPDATE SET last_report_at = $2;
             ''', user_id, now)
             return 0
-    await pool.close()
 
 async def create_report(guild_id, target_user_id, violated_rule, details, message_link, urgency):
     pool = await get_pool()
@@ -241,7 +256,6 @@ async def create_report(guild_id, target_user_id, violated_rule, details, messag
                VALUES ($1, $2, $3, $4, $5, $6) RETURNING report_id''',
             guild_id, target_user_id, violated_rule, details, message_link, urgency
         )
-    await pool.close()
     return report_id
 
 async def update_report_message_id(report_id, message_id):
@@ -251,7 +265,6 @@ async def update_report_message_id(report_id, message_id):
             "UPDATE reports SET message_id = $1 WHERE report_id = $2",
             message_id, report_id
         )
-    await pool.close()
 
 async def update_report_status(report_id, new_status):
     pool = await get_pool()
@@ -260,13 +273,11 @@ async def update_report_status(report_id, new_status):
             "UPDATE reports SET status = $1 WHERE report_id = $2",
             new_status, report_id
         )
-    await pool.close()
 
 async def get_report(report_id):
     pool = await get_pool()
     async with pool.acquire() as connection:
         record = await connection.fetchrow("SELECT * FROM reports WHERE report_id = $1", report_id)
-    await pool.close()
     return record
 
 async def list_reports(status_filter=None):
@@ -279,7 +290,6 @@ async def list_reports(status_filter=None):
     query += " ORDER BY report_id DESC LIMIT 20"
     async with pool.acquire() as connection:
         records = await connection.fetch(query, *params)
-    await pool.close()
     return records
 
 async def get_report_stats():
@@ -290,5 +300,4 @@ async def get_report_stats():
             FROM reports 
             GROUP BY status
         ''')
-    await pool.close()
     return {row['status']: row['count'] for row in stats}

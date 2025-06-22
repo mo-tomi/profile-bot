@@ -11,13 +11,16 @@ async def get_pool():
     if _pool is None or _pool._closed:
         if not DATABASE_URL:
             raise ValueError("DATABASE_URL environment variable is not set.")
+        
+        # pgbouncer対応: statement_cache_size=0 を追加
         _pool = await asyncpg.create_pool(
             DATABASE_URL,
             min_size=1,
             max_size=10,
-            command_timeout=30
+            command_timeout=30,
+            statement_cache_size=0  # pgbouncer互換性のため追加
         )
-        logging.info("✅ 新しいデータベース接続プールを作成しました")
+        logging.info("✅ 新しいデータベース接続プールを作成しました (pgbouncer対応)")
     return _pool
 
 async def close_pool():
@@ -152,7 +155,7 @@ async def save_intro(user_id, channel_id, message_id):
         ''', user_id, channel_id, message_id)
         
         if existing:
-            logging.info(f"🔄 自己紹介を更新: User {user_id}")
+            logging.debug(f"🔄 自己紹介を更新: User {user_id}")
         else:
             logging.info(f"🆕 新しい自己紹介を保存: User {user_id}")
 
@@ -164,9 +167,9 @@ async def get_intro_ids(user_id):
         )
     
     if record:
-        logging.info(f"✅ 自己紹介発見: User {user_id} -> Channel {record['channel_id']}, Message {record['message_id']}")
+        logging.debug(f"✅ 自己紹介発見: User {user_id}")
     else:
-        logging.info(f"❌ 自己紹介未発見: User {user_id}")
+        logging.debug(f"❌ 自己紹介未発見: User {user_id}")
     
     return record
 

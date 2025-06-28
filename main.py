@@ -152,9 +152,17 @@ async def on_message(message):
 
 @client.event
 async def on_voice_state_update(member, before, after):
+    # 特定のbotの自己紹介を除外（shovelとその他指定されたbot）
+    excluded_bot_ids = [533698325203910668, 916300992612540467]
+    
     if (before.channel != after.channel and 
         after.channel and 
         after.channel.id in TARGET_VOICE_CHANNELS):
+        
+        # 除外対象のbotかチェック
+        if member.id in excluded_bot_ids:
+            logging.info(f"🤖 除外対象bot {member.display_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しましたが、自己紹介通知をスキップします")
+            return
         
         logging.info(f"🔊 {member.display_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しました")
         

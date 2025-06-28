@@ -152,8 +152,8 @@ async def on_message(message):
 
 @client.event
 async def on_voice_state_update(member, before, after):
-    # 特定のbotの自己紹介を除外（shovelとその他指定されたbot）
-    excluded_bot_ids = [533698325203910668, 916300992612540467]
+    # 特定のbotと管理人の自己紹介を除外
+    excluded_bot_ids = [533698325203910668, 916300992612540467, 1300226846599675974]
     
     if (before.channel != after.channel and 
         after.channel and 

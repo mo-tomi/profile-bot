@@ -371,3 +371,69 @@ async def get_report_stats():
         ''')
     # 取得したレコードのリストを {'ステータス名': 件数} の形式の辞書に変換して返す
     return {row['status']: row['count'] for row in stats}
+
+async def get_members_without_intro(guild_members):
+    """
+    サーバーメンバーのうち、自己紹介をしていないメンバーのリストを取得する。
+    """
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        # データベースに自己紹介が記録されているユーザーIDを取得
+        intro_users = await connection.fetch("SELECT user_id FROM introductions")
+        intro_user_ids = {row['user_id'] for row in intro_users}
+        
+        # サーバーメンバーから自己紹介未投稿のメンバーを抽出
+        members_without_intro = []
+        for member in guild_members:
+            if not member.bot and member.id not in intro_user_ids:
+                members_without_intro.append(member)
+        
+        return members_without_intro
+
+async def init_daily_reminder_db():
+    """
+    日次リマインダー機能用のテーブルを初期化する。
+    """
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        await connection.execute('''
+            CREATE TABLE IF NOT EXISTS daily_reminder_log (
+                id SERIAL PRIMARY KEY,
+                reminder_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                notified_users TEXT[],
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        ''')
+        await connection.execute('''
+            CREATE INDEX IF NOT EXISTS idx_daily_reminder_date ON daily_reminder_log(reminder_date);
+        ''')
+    logging.info("✅ 日次リマインダー用テーブルを初期化しました")
+
+async def check_daily_reminder_sent(date=None):
+    """
+    指定した日付（デフォルトは今日）にリマインダーが送信済みかチェックする。
+    """
+    if date is None:
+        date = datetime.date.today()
+    
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        record = await connection.fetchrow(
+            "SELECT id FROM daily_reminder_log WHERE reminder_date = $1", date
+        )
+    return record is not None
+
+async def log_daily_reminder(notified_user_ids, date=None):
+    """
+    日次リマインダーの送信ログを記録する。
+    """
+    if date is None:
+        date = datetime.date.today()
+    
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        await connection.execute('''
+            INSERT INTO daily_reminder_log (reminder_date, notified_users)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+        ''', date, notified_user_ids)

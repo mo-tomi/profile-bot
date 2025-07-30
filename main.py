@@ -330,15 +330,15 @@ async def profilebot_command(ctx):
     """
     自己紹介リマインダーを手動でテスト実行するスラッシュコマンド
     """
-    await ctx.defer()
+    await ctx.defer(ephemeral=True)  # 非公開レスポンス
     
     try:
         result = await send_intro_reminder(force=True)
-        await ctx.followup.send(f"🔄 **プロフィールリマインダー実行結果**\n{result}")
+        await ctx.followup.send(f"🔄 **プロフィールリマインダー実行結果**\n{result}", ephemeral=True)
         logging.info(f"✅ /profilebot コマンドが実行されました - 結果: {result}")
     except Exception as e:
         error_msg = f"❌ コマンド実行中にエラー: {str(e)}"
-        await ctx.followup.send(error_msg)
+        await ctx.followup.send(error_msg, ephemeral=True)
         logging.error(f"❌ /profilebot コマンド実行エラー: {e}", exc_info=True)
 
 def main():

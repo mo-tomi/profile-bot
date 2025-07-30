@@ -288,6 +288,11 @@ async def send_intro_reminder(force=False):
         if not intro_channel:
             return f"❌ 自己紹介チャンネル(ID: {INTRODUCTION_CHANNEL_ID})が見つかりません"
             
+        # 通知チャンネルを取得
+        notify_channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
+        if not notify_channel:
+            return f"❌ 通知チャンネル(ID: {NOTIFICATION_CHANNEL_ID})が見つかりません"
+            
         guild = intro_channel.guild
         
         # 自己紹介未投稿のメンバーを取得
@@ -298,19 +303,16 @@ async def send_intro_reminder(force=False):
                 await db.log_daily_reminder([])
             return "🎉 全メンバーが自己紹介済みです！"
         
-        # リマインダーメッセージを作成・送信
-        member_mentions = [member.mention for member in members_without_intro[:10]]  # 最大10人まで
-        remaining_count = len(members_without_intro) - 10
+        # リマインダーメッセージを作成・送信（全員をメンション）
+        member_mentions = [member.mention for member in members_without_intro]  # 全員をメンション
         
         message_content = "🌟 **自己紹介のお知らせ** 🌟\n\n"
         message_content += f"{' '.join(member_mentions)}\n\n"
         message_content += f"こんにちは！<#{INTRODUCTION_CHANNEL_ID}> チャンネルでの自己紹介をお待ちしています！\n"
-        message_content += "あなたのことを教えてください 😊\n\n"
+        message_content += "書ける範囲で構いませんので、あなたのことを教えてください 😊\n"
+        message_content += "趣味、好きなこと、最近気になっていることなど、何でも大丈夫です！"
         
-        if remaining_count > 0:
-            message_content += f"※他にも{remaining_count}名の方が自己紹介をお待ちしています"
-        
-        await intro_channel.send(message_content)
+        await notify_channel.send(message_content)
         
         # ログを記録（forceの場合は記録しない）
         if not force:

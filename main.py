@@ -1,5 +1,4 @@
 import discord
-from discord.ext import commands
 from discord import ui
 import os
 import threading
@@ -32,7 +31,7 @@ intents.voice_states = True
 intents.messages = True
 intents.message_content = True
 intents.members = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = discord.Bot(intents=intents)
 
 app = Flask(__name__)
 @app.route('/')
@@ -324,19 +323,21 @@ async def send_intro_reminder(force=False):
         logging.error(f"❌ リマインダー送信中にエラー: {e}", exc_info=True)
         return f"❌ エラーが発生しました: {str(e)}"
 
-@bot.command(name="profilebot")
+@bot.slash_command(name="profilebot", description="自己紹介リマインダーをテスト実行します")
 async def profilebot_command(ctx):
     """
-    自己紹介リマインダーを手動でテスト実行するコマンド
+    自己紹介リマインダーを手動でテスト実行するスラッシュコマンド
     """
+    await ctx.defer()
+    
     try:
         result = await send_intro_reminder(force=True)
-        await ctx.send(f"🔄 **プロフィールリマインダー実行結果**\n{result}")
-        logging.info(f"✅ !profilebot コマンドが実行されました - 結果: {result}")
+        await ctx.followup.send(f"🔄 **プロフィールリマインダー実行結果**\n{result}")
+        logging.info(f"✅ /profilebot コマンドが実行されました - 結果: {result}")
     except Exception as e:
         error_msg = f"❌ コマンド実行中にエラー: {str(e)}"
-        await ctx.send(error_msg)
-        logging.error(f"❌ !profilebot コマンド実行エラー: {e}", exc_info=True)
+        await ctx.followup.send(error_msg)
+        logging.error(f"❌ /profilebot コマンド実行エラー: {e}", exc_info=True)
 
 def main():
     if not TOKEN:

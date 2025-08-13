@@ -63,6 +63,20 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
+def get_member_display_name(member):
+    """
+    メンバーの表示名を安全に取得する関数
+    ニックネーム → ユーザー名 → "不明なユーザー" の優先順位
+    """
+    if member.nick:  # サーバーニックネームがあればそれを使用
+        return member.nick
+    elif member.name:  # Discordユーザー名を使用
+        return member.name
+    elif member.global_name:  # グローバル表示名があればそれを使用
+        return member.global_name
+    else:
+        return "不明なユーザー"  # フォールバック
+
 @bot.event
 async def on_ready():
     logging.info(f"✅ Botがログインしました: {bot.user}")
@@ -167,10 +181,14 @@ async def on_voice_state_update(member, before, after):
         
         # 除外対象のbotかチェック
         if member.id in excluded_bot_ids:
-            logging.info(f"🤖 除外対象bot {member.display_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しましたが、自己紹介通知をスキップします")
+            member_name = get_member_display_name(member)
+            logging.info(f"🤖 除外対象bot {member_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しましたが、自己紹介通知をスキップします")
             return
         
-        logging.info(f"🔊 {member.display_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しました")
+        # メンバーの表示名を取得（IDではなく名前を確実に使用）
+        member_name = get_member_display_name(member)
+        
+        logging.info(f"🔊 {member_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しました")
         
         notify_channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
         if not notify_channel:
@@ -178,7 +196,7 @@ async def on_voice_state_update(member, before, after):
             return
         
         try:
-            logging.info(f"🔍 {member.display_name} の自己紹介を検索中...")
+            logging.info(f"🔍 {member_name} の自己紹介を検索中...")
             intro_ids = await db.get_intro_ids(member.id)
             
             if intro_ids:
@@ -198,7 +216,7 @@ async def on_voice_state_update(member, before, after):
                         color=discord.Color.blue()
                     )
                     embed.set_author(
-                        name=f"{member.display_name}さんの自己紹介", 
+                        name=f"{member_name}さんの自己紹介",  # 名前を使用
                         icon_url=member.display_avatar.url
                     )
                     
@@ -210,27 +228,28 @@ async def on_voice_state_update(member, before, after):
                     )
                     view.add_item(button)
                     
+                    # メンション無しで名前だけを表示
                     await notify_channel.send(
-                        f"**{member.display_name}** さんが `{after.channel.name}` に入室しました！", 
+                        f"**{member_name}** さんが `{after.channel.name}` に入室しました！", 
                         embed=embed, 
                         view=view
                     )
                     logging.info("✅ 自己紹介付き通知を送信しました")
                     
                 except discord.NotFound:
-                    logging.warning(f"⚠️ {member.display_name} の自己紹介メッセージが見つかりません（削除済み?）")
-                    msg = f"**{member.display_name}** さんが `{after.channel.name}` に入室しました！\n⚠️ この方の自己紹介メッセージが削除されているようです。"
+                    logging.warning(f"⚠️ {member_name} の自己紹介メッセージが見つかりません（削除済み?）")
+                    msg = f"**{member_name}** さんが `{after.channel.name}` に入室しました！\n⚠️ この方の自己紹介メッセージが削除されているようです。"
                     await notify_channel.send(msg)
                     logging.info("✅ 自己紹介なし通知（削除済み）を送信しました")
                     
                 except Exception as fetch_error:
                     logging.error(f"❌ 自己紹介メッセージ取得エラー: {fetch_error}")
-                    msg = f"**{member.display_name}** さんが `{after.channel.name}` に入室しました！\n⚠️ 自己紹介の取得中にエラーが発生しました。"
+                    msg = f"**{member_name}** さんが `{after.channel.name}` に入室しました！\n⚠️ 自己紹介の取得中にエラーが発生しました。"
                     await notify_channel.send(msg)
                     logging.info("✅ エラー時代替通知を送信しました")
             else:
-                logging.info(f"❌ {member.display_name} の自己紹介がDBに見つかりません")
-                msg = f"**{member.display_name}** さんが `{after.channel.name}` に入室しました！\n⚠️ この方の自己紹介はまだ投稿されていないか、見つかりませんでした。"
+                logging.info(f"❌ {member_name} の自己紹介がDBに見つかりません")
+                msg = f"**{member_name}** さんが `{after.channel.name}` に入室しました！\n⚠️ この方の自己紹介はまだ投稿されていないか、見つかりませんでした。"
                 await notify_channel.send(msg)
                 logging.info("✅ 自己紹介なし通知を送信しました")
                 
@@ -238,7 +257,7 @@ async def on_voice_state_update(member, before, after):
             logging.error(f"❌ 通知処理中にエラー: {e}", exc_info=True)
             
             try:
-                msg = f"**{member.display_name}** さんが `{after.channel.name}` に入室しました！"
+                msg = f"**{member_name}** さんが `{after.channel.name}` に入室しました！"
                 await notify_channel.send(msg)
                 logging.info("✅ 最低限の入室通知を送信しました")
             except Exception as fallback_error:
@@ -303,11 +322,17 @@ async def send_intro_reminder(force=False):
                 await db.log_daily_reminder([])
             return "🎉 全メンバーが自己紹介済みです！"
         
-        # リマインダーメッセージを作成・送信（全員をメンション）
-        member_mentions = [member.mention for member in members_without_intro]  # 全員をメンション
+        # リマインダーメッセージを作成・送信
+        # メンションではなく名前のリストを作成
+        member_names = [get_member_display_name(member) for member in members_without_intro[:10]]  # 最初の10名まで
         
         message_content = "🌟 **自己紹介のお知らせ** 🌟\n\n"
-        message_content += f"{' '.join(member_mentions)}\n\n"
+        
+        if len(members_without_intro) > 10:
+            message_content += f"**{', '.join(member_names)} ほか{len(members_without_intro) - 10}名の皆さん**\n\n"
+        else:
+            message_content += f"**{', '.join(member_names)} の皆さん**\n\n"
+        
         message_content += f"こんにちは！<#{INTRODUCTION_CHANNEL_ID}> チャンネルでの自己紹介をお待ちしています！\n"
         message_content += "書ける範囲で構いませんので、あなたのことを教えてください 😊\n"
         message_content += "趣味、好きなこと、最近気になっていることなど、何でも大丈夫です！"

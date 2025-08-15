@@ -84,7 +84,7 @@ def get_member_display_name(member):
     # Discord標準のdisplay_nameを使用
     # これは自動的に以下の優先順位で最適な名前を返します：
     # 1. Server nickname（サーバーニックネーム）
-    # 2. Global display name（グローバル表示名）
+    # 2. Global display name（グローバル表示名）- バージョンによっては利用不可
     # 3. Username（ユーザー名）
     return member.display_name
 
@@ -199,9 +199,12 @@ async def on_voice_state_update(member, before, after):
         # デバッグ用：すべての名前情報を詳細確認
         logging.info(f"🔍 名前情報詳細 (ID: {member.id}):")
         logging.info(f"  - Nick: {repr(member.nick)}")
-        logging.info(f"  - Global Name: {repr(member.global_name)}")
+        logging.info(f"  - Global Name: {repr(getattr(member, 'global_name', 'N/A'))}")
         logging.info(f"  - Username: {repr(member.name)}")
         logging.info(f"  - Display Name: {repr(member.display_name)}")
+        
+        # 利用可能な属性を確認
+        logging.info(f"🔧 Member属性一覧: {[attr for attr in dir(member) if not attr.startswith('_') and 'name' in attr.lower()]}")
         
         member_name = get_member_display_name(member)
         logging.info(f"🔊 使用される名前: {member_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しました")

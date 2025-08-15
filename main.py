@@ -27,14 +27,6 @@ TARGET_VOICE_CHANNELS = [
     1306190768431431721, 1306190915483734026
 ]
 
-# 特定のユーザーIDに対する表示名のマッピング（必要に応じて追加）
-USER_NAME_MAPPING = {
-    1231585151314825226: "くも",  # kumo_mokum49さんの例
-    1397953796642050159: "TOMI",  # tomi_ai.さん → TOMIと表示
-    # 他のユーザーも必要に応じて追加可能
-    # ユーザーID: "表示したい名前",
-}
-
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.messages = True
@@ -74,19 +66,22 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def get_member_display_name(member):
     """
-    メンバーの表示名を安全に取得する関数
-    Discord標準のdisplay_nameを使用（最適な表示名を自動選択）
+    メンバーのDiscordユーザー名を安全に取得する関数
     """
-    # 特定のユーザーIDに対するカスタム名前をチェック
-    if member.id in USER_NAME_MAPPING:
-        return USER_NAME_MAPPING[member.id]
+    # ユーザー名を優先的に取得
+    if hasattr(member, 'name') and member.name:
+        return member.name
     
-    # Discord標準のdisplay_nameを使用
-    # これは自動的に以下の優先順位で最適な名前を返します：
-    # 1. Server nickname（サーバーニックネーム）
-    # 2. Global display name（グローバル表示名）- バージョンによっては利用不可
-    # 3. Username（ユーザー名）
-    return member.display_name
+    # ユーザー名が取得できない場合、display_nameを試す
+    if hasattr(member, 'display_name') and member.display_name:
+        return member.display_name
+    
+    # それでも取得できない場合、nickを試す
+    if hasattr(member, 'nick') and member.nick:
+        return member.nick
+    
+    # 最後の手段：IDを使用するが、ユーザー名風に表示
+    return f"user_{member.id}"
 
 @bot.event
 async def on_ready():

@@ -1,4 +1,3 @@
-```python
 import discord
 from discord import ui
 import os
@@ -401,4 +400,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```

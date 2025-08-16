@@ -1,3 +1,4 @@
+```python
 import discord
 from discord import ui
 import os
@@ -66,22 +67,16 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def get_member_display_name(member):
     """
-    メンバーのDiscordユーザー名を安全に取得する関数
+    サーバーで見える表示名を優先して取得する。
+    優先順: display_name -> nick -> global_name -> name -> 代替表記
     """
-    # ユーザー名を優先的に取得
-    if hasattr(member, 'name') and member.name:
-        return member.name
-    
-    # ユーザー名が取得できない場合、display_nameを試す
-    if hasattr(member, 'display_name') and member.display_name:
-        return member.display_name
-    
-    # それでも取得できない場合、nickを試す
-    if hasattr(member, 'nick') and member.nick:
-        return member.nick
-    
-    # 最後の手段：IDを使用するが、ユーザー名風に表示
-    return f"user_{member.id}"
+    return (
+        getattr(member, "display_name", None)
+        or getattr(member, "nick", None)
+        or getattr(member, "global_name", None)
+        or getattr(member, "name", None)
+        or f"user_{member.id}"
+    )
 
 @bot.event
 async def on_ready():
@@ -129,10 +124,10 @@ async def on_ready():
                         existing_intro = await db.get_intro_ids(message.author.id)
                         if existing_intro:
                             update_count += 1
-                            logging.debug(f"🔄 更新: {message.author.name} (ID: {message.author.id})")
+                            logging.debug(f"🔄 更新: {get_member_display_name(message.author)} (ID: {message.author.id})")
                         else:
                             new_count += 1
-                            logging.info(f"🆕 新規: {message.author.name} (ID: {message.author.id})")
+                            logging.info(f"🆕 新規: {get_member_display_name(message.author)} (ID: {message.author.id})")
                         
                         await db.save_intro(message.author.id, message.channel.id, message.id)
                         
@@ -172,7 +167,7 @@ async def on_message(message):
     if message.channel.id == INTRODUCTION_CHANNEL_ID and not message.author.bot:
         try:
             await db.save_intro(message.author.id, message.channel.id, message.id)
-            logging.info(f"📝 {message.author.name} の新しい自己紹介をDBに保存しました")
+            logging.info(f"📝 {get_member_display_name(message.author)} の新しい自己紹介をDBに保存しました")
         except Exception as e:
             logging.error(f"❌ on_messageでのDB保存中にエラー: {e}", exc_info=True)
 
@@ -195,7 +190,7 @@ async def on_voice_state_update(member, before, after):
         logging.info(f"🔍 名前情報詳細 (ID: {member.id}):")
         logging.info(f"  - Nick: {repr(member.nick)}")
         logging.info(f"  - Global Name: {repr(getattr(member, 'global_name', 'N/A'))}")
-        logging.info(f"  - Username: {repr(member.name)}")
+        logging.info(f"  - Username: {repr(getattr(member, 'name', None))}")
         logging.info(f"  - Display Name: {repr(member.display_name)}")
         
         # 利用可能な属性を確認
@@ -406,3 +401,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```

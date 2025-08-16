@@ -22,10 +22,11 @@ logging.basicConfig(
 TOKEN = os.getenv("TOKEN")
 INTRODUCTION_CHANNEL_ID = 1300659373227638794
 NOTIFICATION_CHANNEL_ID = 1331177944244289598
+
+# 監視するVCチャンネルID（追加分も含む）
 TARGET_VOICE_CHANNELS = [
     1300291307750559754, 1302151049368571925, 1302151154981011486,
     1306190768431431721, 1306190915483734026,
-    # 追加分
     1403273245360259163, 1404396375965433926, 1384813451813191752
 ]
 
@@ -33,7 +34,7 @@ intents = discord.Intents.default()
 intents.voice_states = True
 intents.messages = True
 intents.message_content = True
-intents.members = True
+intents.members = True  # ← Dev Portal側でも「Server Members Intent」をONにしてください
 bot = discord.Bot(intents=intents)
 
 app = Flask(__name__)
@@ -68,57 +69,119 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
-def get_member_display_name(member):
+def get_member_display_name_fast(member) -> str:
     """
-    サーバーで見える表示名を優先して取得する。
-    優先順: display_name -> nick -> global_name -> name -> 代替表記
+    追加フェッチなしで即取れる表示名（不完全なことがある）
     """
     return (
         getattr(member, "display_name", None)
         or getattr(member, "nick", None)
-        or getattr(member, "global_name", None)
         or getattr(member, "name", None)
         or f"user_{member.id}"
     )
 
+async def resolve_member_display_name(member: discord.Member) -> str:
+    """
+    必要なときのみAPIフェッチして、できる限り“サーバーで見える名前”を返す。
+    優先順: guild nick -> global display name -> display_name -> name
+    """
+    # 手元にある情報で十分ならそれを返す
+    nick = getattr(member, "nick", None)
+    if nick:
+        return nick
+
+    # 新UIの「表示名（グローバル）」がメンバーに載っている場合
+    global_name = getattr(member, "global_name", None)
+    if global_name:
+        return global_name
+
+    # ここまでで display_name が name と同じ＝ID風なら、追加取得を試す
+    display = getattr(member, "display_name", None)
+    name = getattr(member, "name", None)
+    needs_fetch = (not nick) and (display is None or display == name)
+
+    if needs_fetch:
+        # 1) guildキャッシュから取り直し
+        try:
+            g = member.guild
+            if g:
+                m2 = g.get_member(member.id)
+                if m2:
+                    if getattr(m2, "nick", None):
+                        return m2.nick
+                    gn2 = getattr(m2, "global_name", None)
+                    if gn2:
+                        return gn2
+                    if getattr(m2, "display_name", None) and m2.display_name != getattr(m2, "name", None):
+                        return m2.display_name
+        except Exception:
+            pass
+
+        # 2) APIでMemberをフェッチ
+        try:
+            if member.guild:
+                m3 = await member.guild.fetch_member(member.id)
+                if getattr(m3, "nick", None):
+                    return m3.nick
+                gn3 = getattr(m3, "global_name", None)
+                if gn3:
+                    return gn3
+                if getattr(m3, "display_name", None) and m3.display_name != getattr(m3, "name", None):
+                    return m3.display_name
+        except Exception:
+            pass
+
+        # 3) APIでUserをフェッチ（global display name用）
+        try:
+            u = bot.get_user(member.id) or await bot.fetch_user(member.id)
+            if u:
+                gn = getattr(u, "global_name", None)
+                if gn:
+                    return gn
+        except Exception:
+            pass
+
+    # 最後の手段
+    return display or name or f"user_{member.id}"
+
 @bot.event
 async def on_ready():
     logging.info(f"✅ Botがログインしました: {bot.user}")
-    
+
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         logging.error("❌ DATABASE_URL環境変数が設定されていません！")
         return
-    
+
     logging.info(f"🔗 データベース接続中... (URL前半: {database_url[:50]}...)")
-    
+
     try:
         logging.info("🔧 データベースを初期化中...")
         await db.init_intro_bot_db()
         await db.init_daily_reminder_db()
-        
+
         intro_count = await db.get_intro_count()
         logging.info(f"📊 現在の自己紹介データ件数: {intro_count}件")
-        
+
         intro_channel = bot.get_channel(INTRODUCTION_CHANNEL_ID)
         if not intro_channel:
             logging.error(f"❌ 自己紹介チャンネル(ID: {INTRODUCTION_CHANNEL_ID})が見つかりません！")
             return
-        
+
         logging.info(f"📜 自己紹介チャンネル確認: {intro_channel.name} (ID: {intro_channel.id})")
-        
+
         notify_channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
         if not notify_channel:
             logging.error(f"❌ 通知チャンネル(ID: {NOTIFICATION_CHANNEL_ID})が見つかりません！")
             return
-        
+
         logging.info(f"📢 通知チャンネル確認: {notify_channel.name} (ID: {notify_channel.id})")
-        
+
         logging.info("🔍 過去の自己紹介をスキャン開始...")
         scan_count = 0
         new_count = 0
         update_count = 0
-        
+
         try:
             async for message in intro_channel.history(limit=3000):
                 if not message.author.bot:
@@ -127,41 +190,41 @@ async def on_ready():
                         existing_intro = await db.get_intro_ids(message.author.id)
                         if existing_intro:
                             update_count += 1
-                            logging.debug(f"🔄 更新: {get_member_display_name(message.author)} (ID: {message.author.id})")
+                            logging.debug(f"🔄 更新: {get_member_display_name_fast(message.author)} (ID: {message.author.id})")
                         else:
                             new_count += 1
-                            logging.info(f"🆕 新規: {get_member_display_name(message.author)} (ID: {message.author.id})")
-                        
+                            logging.info(f"🆕 新規: {get_member_display_name_fast(message.author)} (ID: {message.author.id})")
+
                         await db.save_intro(message.author.id, message.channel.id, message.id)
-                        
+
                         if scan_count % 100 == 0:
                             logging.info(f"📈 スキャン進捗: {scan_count}件処理完了 (新規: {new_count}, 更新: {update_count})")
-                            
+
                     except Exception as save_error:
                         logging.error(f"❌ メッセージ保存エラー (Message ID: {message.id}): {save_error}")
-            
+
             logging.info(f"🎉 スキャン完了！")
             logging.info(f"  📊 総処理数: {scan_count}件")
             logging.info(f"  🆕 新規追加: {new_count}件")
             logging.info(f"  🔄 更新: {update_count}件")
-            
+
             final_count = await db.get_intro_count()
             logging.info(f"📊 最終DB内自己紹介件数: {final_count}件")
-            
+
             recent_intros = await db.list_recent_intros(5)
             if recent_intros:
                 logging.info("📝 最新の自己紹介サンプル:")
                 for intro in recent_intros:
                     logging.info(f"  User: {intro['user_id']}, Channel: {intro['channel_id']}, Message: {intro['message_id']}")
-            
+
         except Exception as scan_error:
             logging.error(f"❌ メッセージスキャン中にエラー: {scan_error}", exc_info=True)
-        
+
         # 日次リマインダータスクを開始
         asyncio.create_task(daily_reminder_task())
-        
+
         logging.info("✅ Bot初期化完了！入室監視を開始します。")
-        
+
     except Exception as e:
         logging.error(f"❌ 起動処理中にエラー: {e}", exc_info=True)
 
@@ -170,7 +233,7 @@ async def on_message(message):
     if message.channel.id == INTRODUCTION_CHANNEL_ID and not message.author.bot:
         try:
             await db.save_intro(message.author.id, message.channel.id, message.id)
-            logging.info(f"📝 {get_member_display_name(message.author)} の新しい自己紹介をDBに保存しました")
+            logging.info(f"📝 {get_member_display_name_fast(message.author)} の新しい自己紹介をDBに保存しました")
         except Exception as e:
             logging.error(f"❌ on_messageでのDB保存中にエラー: {e}", exc_info=True)
 
@@ -178,85 +241,79 @@ async def on_message(message):
 async def on_voice_state_update(member, before, after):
     # 特定のbotと管理人の自己紹介を除外
     excluded_bot_ids = [533698325203910668, 916300992612540467, 1300226846599675974]
-    
-    if (before.channel != after.channel and 
-        after.channel and 
+
+    if (before.channel != after.channel and
+        after.channel and
         after.channel.id in TARGET_VOICE_CHANNELS):
-        
-        # 除外対象のbotかチェック
+
         if member.id in excluded_bot_ids:
-            member_name = get_member_display_name(member)
+            member_name = await resolve_member_display_name(member)
             logging.info(f"🤖 除外対象bot {member_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しましたが、自己紹介通知をスキップします")
             return
-        
-        # デバッグ用：すべての名前情報を詳細確認
+
+        # デバッグ出力
         logging.info(f"🔍 名前情報詳細 (ID: {member.id}):")
-        logging.info(f"  - Nick: {repr(member.nick)}")
-        logging.info(f"  - Global Name: {repr(getattr(member, 'global_name', 'N/A'))}")
+        logging.info(f"  - Nick: {repr(getattr(member, 'nick', None))}")
+        logging.info(f"  - Global Name (attr有無): {hasattr(member, 'global_name')}")
         logging.info(f"  - Username: {repr(getattr(member, 'name', None))}")
-        logging.info(f"  - Display Name: {repr(member.display_name)}")
-        
-        # 利用可能な属性を確認
-        logging.info(f"🔧 Member属性一覧: {[attr for attr in dir(member) if not attr.startswith('_') and 'name' in attr.lower()]}")
-        
-        member_name = get_member_display_name(member)
-        logging.info(f"🔊 使用される名前: {member_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しました")
-        
+        logging.info(f"  - Display Name: {repr(getattr(member, 'display_name', None))}")
+
+        member_name = await resolve_member_display_name(member)
+        logging.info(f"🔊 使用される名前(解決後): {member_name} (ID: {member.id}) がボイスチャンネル '{after.channel.name}' に参加しました")
+
         notify_channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
         if not notify_channel:
             logging.error(f"❌ 通知チャンネル(ID: {NOTIFICATION_CHANNEL_ID})が見つかりません")
             return
-        
+
         try:
             logging.info(f"🔍 {member_name} の自己紹介を検索中...")
             intro_ids = await db.get_intro_ids(member.id)
-            
+
             if intro_ids:
                 logging.info(f"✅ 自己紹介発見: Channel {intro_ids['channel_id']}, Message {intro_ids['message_id']}")
-                
+
                 try:
                     intro_channel = bot.get_channel(intro_ids['channel_id'])
                     if not intro_channel:
                         logging.error(f"❌ 自己紹介チャンネル(ID: {intro_ids['channel_id']})が取得できません")
                         raise Exception("チャンネル取得失敗")
-                    
+
                     intro_message = await intro_channel.fetch_message(intro_ids['message_id'])
                     logging.info(f"✅ 自己紹介メッセージ取得成功 (長さ: {len(intro_message.content)}文字)")
-                    
-                    # シンプルに取得した表示名をそのまま使用
+
                     display_name = member_name
-                    
+
                     embed = discord.Embed(
-                        description=intro_message.content, 
+                        description=intro_message.content,
                         color=discord.Color.blue()
                     )
                     embed.set_author(
                         name=f"{display_name}さんの自己紹介",
                         icon_url=member.display_avatar.url
                     )
-                    
+
                     view = ui.View()
                     button = ui.Button(
-                        label="元の自己紹介へ移動", 
-                        style=discord.ButtonStyle.link, 
+                        label="元の自己紹介へ移動",
+                        style=discord.ButtonStyle.link,
                         url=intro_message.jump_url
                     )
                     view.add_item(button)
-                    
-                    # 表示名をそのまま使用
+
                     await notify_channel.send(
-                        f"**{display_name}** さんが `{after.channel.name}` に入室しました！", 
-                        embed=embed, 
+                        f"**{display_name}** さんが `{after.channel.name}` に入室しました！",
+                        embed=embed,
                         view=view
                     )
                     logging.info("✅ 自己紹介付き通知を送信しました")
-                    
+
                 except discord.NotFound:
                     logging.warning(f"⚠️ {member_name} の自己紹介メッセージが見つかりません（削除済み?）")
                     msg = f"**{member_name}** さんが `{after.channel.name}` に入室しました！\n⚠️ この方の自己紹介メッセージが削除されているようです。"
                     await notify_channel.send(msg)
                     logging.info("✅ 自己紹介なし通知（削除済み）を送信しました")
-                    
+
                 except Exception as fetch_error:
                     logging.error(f"❌ 自己紹介メッセージ取得エラー: {fetch_error}")
                     msg = f"**{member_name}** さんが `{after.channel.name}` に入室しました！\n⚠️ 自己紹介の取得中にエラーが発生しました。"
@@ -267,10 +324,9 @@ async def on_voice_state_update(member, before, after):
                 msg = f"**{member_name}** さんが `{after.channel.name}` に入室しました！\n⚠️ この方の自己紹介はまだ投稿されていないか、見つかりませんでした。"
                 await notify_channel.send(msg)
                 logging.info("✅ 自己紹介なし通知を送信しました")
-                
+
         except Exception as e:
             logging.error(f"❌ 通知処理中にエラー: {e}", exc_info=True)
-            
             try:
                 msg = f"**{member_name}** さんが `{after.channel.name}` に入室しました！"
                 await notify_channel.send(msg)
@@ -285,27 +341,19 @@ async def daily_reminder_task():
     while True:
         try:
             now = datetime.now()
-            # 毎日午前10時に実行
             target_time = time(10, 0)  # 10:00 AM
-            
-            # 今日の10時まで待機
             target_datetime = datetime.combine(now.date(), target_time)
             if now.time() > target_time:
-                # 既に10時を過ぎている場合は明日の10時に設定
                 target_datetime += timedelta(days=1)
-            
-            # 次の実行時刻まで待機
             sleep_seconds = (target_datetime - now).total_seconds()
             logging.info(f"⏰ 次回自己紹介リマインダー実行: {target_datetime} ({sleep_seconds:.0f}秒後)")
             await asyncio.sleep(sleep_seconds)
-            
-            # 共通関数を使用してリマインダーを送信
+
             result = await send_intro_reminder()
             logging.info(result)
-            
+
         except Exception as e:
             logging.error(f"❌ 日次リマインダー処理中にエラー: {e}", exc_info=True)
-            # エラーが発生しても1時間後に再試行
             await asyncio.sleep(3600)
 
 async def send_intro_reminder(force=False):
@@ -313,54 +361,49 @@ async def send_intro_reminder(force=False):
     自己紹介リマインダーを送信する共通関数
     """
     try:
-        # forceがTrueでない場合、今日既にリマインダーを送信済みかチェック
         if not force and await db.check_daily_reminder_sent():
             return "📅 今日は既にリマインダーを送信済みです"
-        
-        # 自己紹介チャンネルとサーバーを取得
+
         intro_channel = bot.get_channel(INTRODUCTION_CHANNEL_ID)
         if not intro_channel:
             return f"❌ 自己紹介チャンネル(ID: {INTRODUCTION_CHANNEL_ID})が見つかりません"
-            
-        # 通知チャンネルを取得
+
         notify_channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
         if not notify_channel:
             return f"❌ 通知チャンネル(ID: {NOTIFICATION_CHANNEL_ID})が見つかりません"
-            
+
         guild = intro_channel.guild
-        
-        # 自己紹介未投稿のメンバーを取得
+
         members_without_intro = await db.get_members_without_intro(guild.members)
-        
         if not members_without_intro:
             if not force:
                 await db.log_daily_reminder([])
             return "🎉 全メンバーが自己紹介済みです！"
-        
-        # リマインダーメッセージを作成・送信
-        # メンションではなく名前のリストを作成
-        member_names = [get_member_display_name(member) for member in members_without_intro[:10]]  # 最初の10名まで
-        
+
+        # 名前解決（必要に応じてフェッチ）
+        first_ten = members_without_intro[:10]
+        member_names = []
+        for m in first_ten:
+            member_names.append(await resolve_member_display_name(m))
+
         message_content = "🌟 **自己紹介のお知らせ** 🌟\n\n"
-        
         if len(members_without_intro) > 10:
             message_content += f"**{', '.join(member_names)} ほか{len(members_without_intro) - 10}名の皆さん**\n\n"
         else:
             message_content += f"**{', '.join(member_names)} の皆さん**\n\n"
-        
+
         message_content += f"こんにちは！<#{INTRODUCTION_CHANNEL_ID}> チャンネルでの自己紹介をお待ちしています！\n"
         message_content += "書ける範囲で構いませんので、あなたのことを教えてください 😊\n"
         message_content += "趣味、好きなこと、最近気になっていることなど、何でも大丈夫です！"
-        
+
         await notify_channel.send(message_content)
-        
-        # ログを記録（forceの場合は記録しない）
+
         if not force:
             notified_user_ids = [str(member.id) for member in members_without_intro]
             await db.log_daily_reminder(notified_user_ids)
-        
+
         return f"✅ 自己紹介リマインダーを送信しました ({len(members_without_intro)}名対象)"
-        
+
     except Exception as e:
         logging.error(f"❌ リマインダー送信中にエラー: {e}", exc_info=True)
         return f"❌ エラーが発生しました: {str(e)}"
@@ -371,7 +414,6 @@ async def profilebot_command(ctx):
     自己紹介リマインダーを手動でテスト実行するスラッシュコマンド
     """
     await ctx.defer(ephemeral=True)  # 非公開レスポンス
-    
     try:
         result = await send_intro_reminder(force=True)
         await ctx.followup.send(f"🔄 **プロフィールリマインダー実行結果**\n{result}", ephemeral=True)
@@ -385,15 +427,15 @@ def main():
     if not TOKEN:
         logging.error("❌ TOKENが設定されていません！")
         return
-    
+
     if not os.getenv("DATABASE_URL"):
         logging.error("❌ DATABASE_URLが設定されていません！")
         return
-    
+
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     logging.info("✅ Webサーバーを開始しました")
-    
+
     logging.info("🚀 Botを開始します...")
     try:
         bot.run(TOKEN)

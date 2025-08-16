@@ -24,7 +24,9 @@ INTRODUCTION_CHANNEL_ID = 1300659373227638794
 NOTIFICATION_CHANNEL_ID = 1331177944244289598
 TARGET_VOICE_CHANNELS = [
     1300291307750559754, 1302151049368571925, 1302151154981011486,
-    1306190768431431721, 1306190915483734026
+    1306190768431431721, 1306190915483734026,
+    # 追加分
+    1403273245360259163, 1404396375965433926, 1384813451813191752
 ]
 
 intents = discord.Intents.default()
@@ -35,12 +37,15 @@ intents.members = True
 bot = discord.Bot(intents=intents)
 
 app = Flask(__name__)
+
 @app.route('/')
 def home():
     return "Self-Introduction Bot v2 is running!"
+
 @app.route('/health')
 def health_check():
     return "OK"
+
 def run_flask():
     port = int(os.getenv("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
@@ -54,10 +59,9 @@ async def shutdown():
 def signal_handler(sig, frame):
     logging.info(f"🛑 シグナル {sig} を受信しました")
     try:
-        import asyncio
         loop = asyncio.get_event_loop()
         loop.create_task(shutdown())
-    except:
+    except Exception:
         pass
     sys.exit(0)
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/tomim/profile-bot/internal/database"
 )
 
 // onMessageCreate はメッセージ投稿時に実行されるハンドラー
@@ -81,16 +82,30 @@ func (b *Bot) getVoiceChannelTextChat(s *discordgo.Session, voiceChannelID strin
 		return "", fmt.Errorf("failed to get voice channel: %w", err)
 	}
 
-	// ギルド情報を取得
-	guild, err := s.Guild(vcChannel.GuildID)
+	log.Printf("🔍 Debug: VC Channel Info - ID: %s, Name: %s, Type: %d, ParentID: %s",
+		vcChannel.ID, vcChannel.Name, vcChannel.Type, vcChannel.ParentID)
+
+	// ギルドの全チャンネルを取得（API経由）
+	channels, err := s.GuildChannels(vcChannel.GuildID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get guild: %w", err)
+		return "", fmt.Errorf("failed to get guild channels: %w", err)
+	}
+
+	// デバッグ: 全チャンネルの情報を出力
+	log.Printf("🔍 Debug: Searching for Text-in-Voice channel (Total channels: %d)", len(channels))
+	for _, ch := range channels {
+		// VCの周辺チャンネルのみログ出力
+		if ch.ParentID == voiceChannelID || ch.ParentID == vcChannel.ParentID || ch.ID == voiceChannelID {
+			log.Printf("  - Channel: ID=%s, Name=%s, Type=%d, ParentID=%s",
+				ch.ID, ch.Name, ch.Type, ch.ParentID)
+		}
 	}
 
 	// 全チャンネルから検索
 	// Text-in-Voice機能の専用チャットは、親IDがVCのIDと同じテキストチャンネル
-	for _, ch := range guild.Channels {
+	for _, ch := range channels {
 		if ch.Type == discordgo.ChannelTypeGuildText && ch.ParentID == voiceChannelID {
+			log.Printf("✅ Found Text-in-Voice channel: %s (ID: %s)", ch.Name, ch.ID)
 			return ch.ID, nil
 		}
 	}

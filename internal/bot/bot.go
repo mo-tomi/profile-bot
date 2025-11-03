@@ -147,14 +147,35 @@ func (b *Bot) scanIntroductionHistory(s *discordgo.Session, channelID string) {
 	newCount := 0
 	updateCount := 0
 
-	// 過去3000件のメッセージを取得
-	messages, err := s.ChannelMessages(channelID, 3000, "", "", "")
-	if err != nil {
-		log.Printf("❌ Failed to fetch channel messages: %v", err)
-		return
+	// 過去のメッセージを取得（最大3000件、100件ずつ）
+	var allMessages []*discordgo.Message
+	var lastMessageID string
+	targetCount := 3000
+
+	for len(allMessages) < targetCount {
+		// Discord APIは一度に最大100件まで
+		limit := 100
+		if remaining := targetCount - len(allMessages); remaining < limit {
+			limit = remaining
+		}
+
+		messages, err := s.ChannelMessages(channelID, limit, lastMessageID, "", "")
+		if err != nil {
+			log.Printf("❌ Failed to fetch channel messages: %v", err)
+			break
+		}
+
+		if len(messages) == 0 {
+			break // これ以上メッセージがない
+		}
+
+		allMessages = append(allMessages, messages...)
+		lastMessageID = messages[len(messages)-1].ID
 	}
 
-	for _, message := range messages {
+	log.Printf("📊 Fetched %d messages from channel history", len(allMessages))
+
+	for _, message := range allMessages {
 		if message.Author.Bot {
 			continue
 		}

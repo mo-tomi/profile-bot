@@ -20,9 +20,6 @@ func NewDB(ctx context.Context, connString string) (*DB, error) {
 		return nil, fmt.Errorf("unable to parse connection string: %w", err)
 	}
 
-	// pgbouncer互換性のため、prepared statementを無効化
-	config.ConnConfig.DefaultQueryExecMode = 0 // QueryExecModeSimpleProtocol
-
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create connection pool: %w", err)

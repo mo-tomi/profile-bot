@@ -1,0 +1,24 @@
+# 家に持ち込んではいけないものリスト
+
+# Gitの秘密の設計図
+.git
+.gitignore
+
+# Docker自身の設計図
+Dockerfile
+.dockerignore
+
+# Pythonの仮想環境（パソコンの中だけで使うもの）
+.venv
+venv
+*/.venv
+*/venv
+
+# Pythonが作る一時的なゴミ箱
+__pycache__
+*.pyc
+*.pyo
+
+# 環境変数の秘密のメモ（絶対に持ち込んではいけない！）
+.env
+*.env

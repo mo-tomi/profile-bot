@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: profile-bot
+  labels:
+    app: profile-bot
+spec:
+  replicas: 2  # 複数レプリカで重複防止をテスト
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: profile-bot
+  template:
+    metadata:
+      labels:
+        app: profile-bot
+    spec:
+      containers:
+      - name: bot
+        image: ghcr.io/tomim/profile-bot:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: DISCORD_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: profile-bot-secrets
+              key: discord-token
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: profile-bot-secrets
+              key: database-url
+        - name: LOG_LEVEL
+          value: "info"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: PORT
+          value: "8080"
+        - name: INTRODUCTION_CHANNEL_ID
+          value: "1300659373227638794"
+        - name: NOTIFICATION_CHANNEL_ID
+          value: "1331177944244289598"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: config
+          mountPath: /app/configs
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: profile-bot-config
+      restartPolicy: Always

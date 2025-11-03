@@ -1,0 +1,73 @@
+# ロール表示設定ファイル
+
+role_categories:
+  - name: "障害"
+    display_name: "【障害】"
+    emoji_prefix: true
+    roles:
+      - name: "うつ病"
+        emoji: "💙"
+      - name: "ASD（自閉症スペクトラム障害）"
+        emoji: "🟢"
+      - name: "ADHD（注意欠如・多動性障害）"
+        emoji: "⚡"
+      - name: "発達障害"
+        emoji: "🧠"
+      - name: "グレーゾーン"
+        emoji: "🌀"
+      - name: "双極性障害"
+        emoji: "💫"
+      - name: "てんかん"
+        emoji: "⚠️"
+      - name: "境界性パーソナリティ"
+        emoji: "💗"
+      - name: "視覚障害"
+        emoji: "👁️"
+
+  - name: "性別"
+    display_name: "【性別】"
+    emoji_prefix: true
+    roles:
+      - name: "男性"
+        emoji: "👨"
+      - name: "女性"
+        emoji: "👩"
+
+  - name: "手帳"
+    display_name: "【手帳】"
+    emoji_prefix: true
+    roles:
+      - name: "身体手帳"
+        emoji: "🟦"
+      - name: "療育手帳"
+        emoji: "📗"
+      - name: "精神手帳"
+        emoji: "💚"
+
+  - name: "コミュニケーション"
+    display_name: "【コミュニケーション】"
+    emoji_prefix: true
+    roles:
+      - name: "通話OK"
+        emoji: "📞"
+      - name: "OKフレンド申請OK"
+        emoji: "✅"
+      - name: "NGフレンド申請NG"
+        emoji: "❌"
+      - name: "フレンド申請(要相談)"
+        emoji: "⚠️"
+
+# 除外するロール名
+excluded_roles:
+  - "@everyone"
+  - "Carl-bot"
+
+# 除外するロール名のサフィックス（末尾）
+excluded_suffixes:
+  - "bot"
+  - "Bot"
+
+# 特殊フィルター
+special_filters:
+  - pattern: "（聴覚者）"
+    action: "remove"

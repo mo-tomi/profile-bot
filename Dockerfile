@@ -1,29 +1,48 @@
-# ------------------------------------------------------------------
-# BUMPくんの家の設計図 (Dockerfile)
-# ------------------------------------------------------------------
+# Multi-stage build for Discord Profile Bot
 
-# STEP 1: 家の土台と骨組みを選ぶ
-# Pythonバージョン3.11が使える、スリムで頑丈な土台(OS)を使います。
-FROM python:3.11-slim
+# Build stage
+FROM golang:1.21-alpine AS builder
 
-# STEP 2: 家の中で作業する場所を決める
-# 「/app」という名前の作業部屋を作って、これからはそこで作業します。
-WORKDIR /app
+WORKDIR /build
 
-# STEP 3: 必要な道具リストを先に家に運び込む
-# まず、ボットを動かすのに必要な部品リスト(requirements.txt)だけをコピーします。
-# こうすると、家のリフォームが速くなる魔法がかかります。
-COPY requirements.txt .
+# Install build dependencies
+RUN apk add --no-cache git
 
-# STEP 4: 道具リストを見て、全部の道具を設置する
-# 部品リストを見ながら、pipコマンドで必要な道具を全部インストールします。
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
 
-# STEP 5: 残りの家財道具を全部運び込む
-# 最後に、ボットのプログラム本体(main.pyやdatabase.pyなど)を全部コピーします。
+# Copy source code
 COPY . .
 
-# STEP 6: 家の電源を入れる方法を決める
-# この家の電源スイッチは「python main.py」だよ、と教えてあげます。
-# これでコンテナが起動したときに、自動でボットが動き出します。
-CMD ["python", "main.py"]
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags="-w -s" -o bot ./cmd/bot
+
+# Runtime stage
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk --no-cache add ca-certificates tzdata
+
+WORKDIR /app
+
+# Copy binary from build stage
+COPY --from=builder /build/bot .
+
+# Copy config files
+COPY --from=builder /build/configs ./configs
+
+# Create non-root user
+RUN adduser -D -u 1000 botuser && \
+    chown -R botuser:botuser /app
+
+USER botuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+EXPOSE 8080
+
+CMD ["./bot"]

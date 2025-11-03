@@ -1,0 +1,108 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// Config はアプリケーション設定を保持する構造体
+type Config struct {
+	// Discord設定
+	DiscordToken         string
+	IntroductionChannelID string
+	NotificationChannelID string
+
+	// 監視対象VCチャンネルID
+	TargetVoiceChannels []string
+
+	// 除外ユーザーID
+	ExcludedUserIDs []string
+
+	// データベース設定
+	DatabaseURL string
+
+	// アプリケーション設定
+	LogLevel    string
+	Environment string
+	Port        string
+
+	// ロール設定ファイルパス
+	RolesConfigPath string
+
+	// 自己紹介済みロール名
+	IntroducedRoleName string
+}
+
+// LoadConfig は環境変数からアプリケーション設定を読み込む
+func LoadConfig() (*Config, error) {
+	config := &Config{
+		DiscordToken:         os.Getenv("DISCORD_TOKEN"),
+		IntroductionChannelID: getEnvOrDefault("INTRODUCTION_CHANNEL_ID", "1300659373227638794"),
+		NotificationChannelID: getEnvOrDefault("NOTIFICATION_CHANNEL_ID", "1331177944244289598"),
+		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		LogLevel:             getEnvOrDefault("LOG_LEVEL", "info"),
+		Environment:          getEnvOrDefault("ENVIRONMENT", "production"),
+		Port:                 getEnvOrDefault("PORT", "8080"),
+		RolesConfigPath:      getEnvOrDefault("ROLES_CONFIG_PATH", "configs/roles.yaml"),
+		IntroducedRoleName:   getEnvOrDefault("INTRODUCED_ROLE_NAME", "自己紹介済み"),
+	}
+
+	// 必須環境変数のチェック
+	if config.DiscordToken == "" {
+		return nil, fmt.Errorf("DISCORD_TOKEN environment variable is required")
+	}
+	if config.DatabaseURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL environment variable is required")
+	}
+
+	// 監視対象VCチャンネルID（デフォルト値）
+	config.TargetVoiceChannels = []string{
+		"1300291307750559754",
+		"1302151049368571925",
+		"1302151154981011486",
+		"1306190768431431721",
+		"1306190915483734026",
+		"1403273245360259163",
+		"1404396375965433926",
+		"1384813451813191752",
+	}
+
+	// 環境変数で上書き可能
+	if vcChannels := os.Getenv("TARGET_VOICE_CHANNELS"); vcChannels != "" {
+		config.TargetVoiceChannels = strings.Split(vcChannels, ",")
+	}
+
+	// 除外ユーザーID（デフォルト値）
+	config.ExcludedUserIDs = []string{
+		"533698325203910668",
+		"916300992612540467",
+		"1300226846599675974",
+	}
+
+	// 環境変数で上書き可能
+	if excludedIDs := os.Getenv("EXCLUDED_USER_IDS"); excludedIDs != "" {
+		config.ExcludedUserIDs = strings.Split(excludedIDs, ",")
+	}
+
+	return config, nil
+}
+
+// getEnvOrDefault は環境変数を取得し、存在しない場合はデフォルト値を返す
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// getEnvAsInt は環境変数を整数として取得し、存在しない場合はデフォルト値を返す
+func getEnvAsInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}

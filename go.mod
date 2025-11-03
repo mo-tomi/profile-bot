@@ -1,6 +1,6 @@
 module github.com/tomim/profile-bot
 
-go 1.24.0
+go 1.23
 
 require (
 	github.com/bwmarrin/discordgo v0.29.0

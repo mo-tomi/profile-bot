@@ -153,7 +153,7 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 					Label: "元の自己紹介を見る",
 					Style: discordgo.LinkButton,
 					URL:   introLink,
-					Emoji: &discordgo.ComponentEmoji{
+					Emoji: discordgo.ComponentEmoji{
 						Name: "📝",
 					},
 				},

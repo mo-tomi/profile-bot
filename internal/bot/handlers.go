@@ -62,83 +62,30 @@ func (b *Bot) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateU
 
 	log.Printf("🔊 User %s joined VC (Channel ID: %s)", vs.UserID, vs.ChannelID)
 
-	// VCの専用テキストチャット（Text-in-Voice）を取得
-	textChannelID, err := b.getVoiceChannelTextChat(s, vs.ChannelID, vs.GuildID)
+	// Text-in-Voice機能の確認
+	// Discord APIでは、Text-in-Voice有効時、VCチャンネル自体にメッセージを送信できる
+	vcChannel, err := s.Channel(vs.ChannelID)
 	if err != nil {
-		// 失敗時は何もしない（要件定義書 5.2節）
-		log.Printf("⚠️  Voice channel text chat not available (VC: %s): %v", vs.ChannelID, err)
+		log.Printf("❌ Failed to get VC channel: %v", err)
 		return
 	}
 
-	log.Printf("✅ Found text channel %s for VC %s", textChannelID, vs.ChannelID)
+	// VCチャンネルにlast_message_idがある場合、Text-in-Voice有効の可能性が高い
+	hasTextInVoice := vcChannel.LastMessageID != ""
+
+	var textChannelID string
+	if hasTextInVoice {
+		// Text-in-Voice有効: VCチャンネル自体にメッセージを送信
+		log.Printf("✅ Sending to VC channel (Text-in-Voice enabled): %s", vs.ChannelID)
+		textChannelID = vs.ChannelID
+	} else {
+		// Text-in-Voice無効: 通知チャンネルにフォールバック
+		log.Printf("🔄 Text-in-Voice not enabled, using notification channel fallback")
+		textChannelID = b.Config.NotificationChannelID
+	}
 
 	// 自己紹介を取得して投稿
 	go b.sendIntroductionToVoiceChat(s, textChannelID, vs.Member, vs.ChannelID, vs.GuildID)
-}
-
-// getVoiceChannelTextChat はVCの専用テキストチャットIDを取得する（強化版）
-func (b *Bot) getVoiceChannelTextChat(s *discordgo.Session, voiceChannelID, guildID string) (string, error) {
-	log.Printf("🔍 Searching for Text-in-Voice channel for VC: %s", voiceChannelID)
-
-	// ギルドの全チャンネルを取得（APIから直接取得）
-	channels, err := s.GuildChannels(guildID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get guild channels: %w", err)
-	}
-
-	log.Printf("📋 Total channels in guild: %d", len(channels))
-
-	// VCチャンネル情報を取得
-	var vcChannel *discordgo.Channel
-	for _, ch := range channels {
-		if ch.ID == voiceChannelID {
-			vcChannel = ch
-			break
-		}
-	}
-
-	if vcChannel == nil {
-		return "", fmt.Errorf("voice channel not found in guild channels list")
-	}
-
-	log.Printf("🎤 VC Info - ID: %s, Name: %s, Type: %d, ParentID: %s",
-		vcChannel.ID, vcChannel.Name, vcChannel.Type, vcChannel.ParentID)
-
-	// デバッグ: 全チャンネルの情報を出力（Text-in-Voice候補を探す）
-	var candidates []string
-	for _, ch := range channels {
-		// テキストチャンネルで、VCと関連がありそうなもの
-		if ch.Type == discordgo.ChannelTypeGuildText {
-			// パターン1: ParentIDがVCのID（これがText-in-Voiceの正しい構造）
-			if ch.ParentID == voiceChannelID {
-				log.Printf("  ✨ Text-in-Voice candidate (ParentID matches VC): %s (ID: %s, ParentID: %s)",
-					ch.Name, ch.ID, ch.ParentID)
-				candidates = append(candidates, ch.ID)
-			}
-			// パターン2: VCと同じ親カテゴリで名前が似ている
-			if ch.ParentID == vcChannel.ParentID && strings.Contains(ch.Name, vcChannel.Name) {
-				log.Printf("  🔍 Potential Text-in-Voice (same parent, similar name): %s (ID: %s)",
-					ch.Name, ch.ID)
-			}
-		}
-	}
-
-	// Text-in-Voiceチャンネルを検索
-	// Discord API仕様: Text-in-VoiceはParentIDがVCのIDと同じテキストチャンネル
-	for _, ch := range channels {
-		if ch.Type == discordgo.ChannelTypeGuildText && ch.ParentID == voiceChannelID {
-			log.Printf("✅ Found Text-in-Voice channel: %s (ID: %s)", ch.Name, ch.ID)
-			return ch.ID, nil
-		}
-	}
-
-	// 見つからない場合の詳細ログ
-	if len(candidates) == 0 {
-		log.Printf("❌ No Text-in-Voice channel found. This VC may not have Text-in-Voice enabled.")
-		log.Printf("   To enable: Right-click the VC → Edit Channel → Enable 'Text Chat in Voice Channels'")
-	}
-
-	return "", fmt.Errorf("voice channel text chat not found (Text-in-Voice may be disabled)")
 }
 
 // sendIntroductionToVoiceChat はVCのテキストチャットに自己紹介を投稿する
@@ -164,13 +111,13 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 	if err != nil || intro == nil {
 		// パターンC: 自己紹介なし（要件定義書 5.2節）
 		message := fmt.Sprintf("━━━━━━━━━━━━━━━━━━━\n👤 %s さんが入室しました\n\n⚠️ この方の自己紹介はまだ投稿されていません\n━━━━━━━━━━━━━━━━━━━", username)
-
+		
 		_, err = s.ChannelMessageSend(channelID, message)
 		if err != nil {
 			log.Printf("❌ Failed to send introduction (no intro): %v", err)
 			return
 		}
-
+		
 		log.Printf("✅ Sent 'no introduction' message for user %s", username)
 		return
 	}
@@ -190,13 +137,35 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 	}
 
 	// ロール情報を取得
-	roleInfo := b.getRoleInfo(s, member)
+	roleInfo := b.getRoleInfo(s, member, guildID)
 
 	// Embed作成（パターンAまたはB）
 	embed := b.createIntroductionEmbed(username, member.User.AvatarURL(""), vcName, introContent, intro, roleInfo, guildID)
 
-	// メッセージ送信
-	_, err = s.ChannelMessageSendEmbed(channelID, embed)
+	// 元の自己紹介へのリンクボタンを作成
+	introLink := fmt.Sprintf("https://discord.com/channels/%s/%s/%s",
+		guildID, intro.ChannelID, intro.MessageID)
+
+	components := []discordgo.MessageComponent{
+		discordgo.ActionsRow{
+			Components: []discordgo.MessageComponent{
+				discordgo.Button{
+					Label: "元の自己紹介を見る",
+					Style: discordgo.LinkButton,
+					URL:   introLink,
+					Emoji: &discordgo.ComponentEmoji{
+						Name: "📝",
+					},
+				},
+			},
+		},
+	}
+
+	// メッセージ送信（Embed + ボタン）
+	_, err = s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+		Embeds:     []*discordgo.MessageEmbed{embed},
+		Components: components,
+	})
 	if err != nil {
 		log.Printf("❌ Failed to send introduction embed: %v", err)
 		return
@@ -206,13 +175,13 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 }
 
 // getRoleInfo はメンバーのロール情報を取得する
-func (b *Bot) getRoleInfo(s *discordgo.Session, member *discordgo.Member) map[string][]string {
+func (b *Bot) getRoleInfo(s *discordgo.Session, member *discordgo.Member, guildID string) map[string][]string {
 	roleInfo := make(map[string][]string)
 
 	// ギルド情報を取得
-	guild, err := s.Guild(member.GuildID)
+	guild, err := s.Guild(guildID)
 	if err != nil {
-		log.Printf("❌ Failed to get guild: %v", err)
+		log.Printf("❌ Failed to get guild (ID: %s): %v", guildID, err)
 		return roleInfo
 	}
 
@@ -245,7 +214,7 @@ func (b *Bot) getRoleInfo(s *discordgo.Session, member *discordgo.Member) map[st
 	return roleInfo
 }
 
-// createIntroductionEmbed は自己紹介のEmbedを作成する（要件定義書 5.2節準拠）
+// createIntroductionEmbed は自己紹介のEmbedを作成する（シンプル版）
 func (b *Bot) createIntroductionEmbed(username, avatarURL, vcName, introContent string, intro *database.Introduction, roleInfo map[string][]string, guildID string) *discordgo.MessageEmbed {
 	var description strings.Builder
 
@@ -253,36 +222,28 @@ func (b *Bot) createIntroductionEmbed(username, avatarURL, vcName, introContent 
 	description.WriteString("━━━━━━━━━━━━━━━━━━━\n")
 	description.WriteString(fmt.Sprintf("👤 %s さんが入室しました\n", username))
 
-	// ロール情報がある場合（パターンA）
+	// ロール情報がある場合
 	if len(roleInfo) > 0 {
-		description.WriteString("\n📋 プロフィール\n")
-		description.WriteString("━━━━━━━━━━━━━━━━━━━\n")
+		description.WriteString("\n")
 
 		// RolesConfigの順序でカテゴリを表示
 		for _, category := range b.RolesConfig.RoleCategories {
 			if roles, exists := roleInfo[category.DisplayName]; exists && len(roles) > 0 {
-				description.WriteString(fmt.Sprintf("\n%s\n", category.DisplayName))
+				description.WriteString(fmt.Sprintf("%s\n", category.DisplayName))
 				for _, role := range roles {
 					description.WriteString(fmt.Sprintf("%s\n", role))
 				}
+				description.WriteString("\n")
 			}
 		}
 
-		description.WriteString("\n━━━━━━━━━━━━━━━━━━━\n")
+		description.WriteString("━━━━━━━━━━━━━━━━━━━\n")
 	}
 
-	// 自己紹介本文
-	description.WriteString("📝 自己紹介\n\n")
+	// 自己紹介本文（ヘッダーなし）
+	description.WriteString("\n")
 	description.WriteString(introContent)
-	description.WriteString("\n\n")
-
-	// 元の自己紹介へのリンク
-	if intro != nil {
-		introLink := fmt.Sprintf("https://discord.com/channels/%s/%s/%s",
-			guildID, intro.ChannelID, intro.MessageID)
-		description.WriteString(fmt.Sprintf("[元の自己紹介を見る](%s)\n", introLink))
-	}
-
+	description.WriteString("\n")
 	description.WriteString("━━━━━━━━━━━━━━━━━━━")
 
 	embed := &discordgo.MessageEmbed{

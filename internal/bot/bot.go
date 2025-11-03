@@ -21,6 +21,11 @@ type Bot struct {
 
 // NewBot は新しいBotインスタンスを作成する
 func NewBot(cfg *config.Config, rolesConfig *config.RolesConfig, db *database.DB) (*Bot, error) {
+	// トークンの検証
+	if cfg.DiscordToken == "" {
+		return nil, fmt.Errorf("DISCORD_TOKEN is empty - please set the DISCORD_TOKEN environment variable")
+	}
+
 	// Discord セッション作成
 	session, err := discordgo.New("Bot " + cfg.DiscordToken)
 	if err != nil {

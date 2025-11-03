@@ -38,10 +38,10 @@ type Config struct {
 // LoadConfig は環境変数からアプリケーション設定を読み込む
 func LoadConfig() (*Config, error) {
 	config := &Config{
-		DiscordToken:         os.Getenv("DISCORD_TOKEN"),
+		DiscordToken:         strings.TrimSpace(os.Getenv("DISCORD_TOKEN")),
 		IntroductionChannelID: getEnvOrDefault("INTRODUCTION_CHANNEL_ID", "1300659373227638794"),
 		NotificationChannelID: getEnvOrDefault("NOTIFICATION_CHANNEL_ID", "1331177944244289598"),
-		DatabaseURL:          os.Getenv("DATABASE_URL"),
+		DatabaseURL:          strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		LogLevel:             getEnvOrDefault("LOG_LEVEL", "info"),
 		Environment:          getEnvOrDefault("ENVIRONMENT", "production"),
 		Port:                 getEnvOrDefault("PORT", "8080"),
@@ -51,10 +51,10 @@ func LoadConfig() (*Config, error) {
 
 	// 必須環境変数のチェック
 	if config.DiscordToken == "" {
-		return nil, fmt.Errorf("DISCORD_TOKEN environment variable is required")
+		return nil, fmt.Errorf("DISCORD_TOKEN environment variable is required\n\nPlease set it using:\n  PowerShell: $env:DISCORD_TOKEN = \"your_token_here\"\n  Bash: export DISCORD_TOKEN=\"your_token_here\"")
 	}
 	if config.DatabaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL environment variable is required")
+		return nil, fmt.Errorf("DATABASE_URL environment variable is required\n\nPlease set it using:\n  PowerShell: $env:DATABASE_URL = \"your_database_url_here\"\n  Bash: export DATABASE_URL=\"your_database_url_here\"")
 	}
 
 	// 監視対象VCチャンネルID（デフォルト値）

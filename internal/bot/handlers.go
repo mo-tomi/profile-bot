@@ -60,15 +60,18 @@ func (b *Bot) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateU
 		return
 	}
 
-	log.Printf("🔊 User %s joined VC (Channel ID: %s)", vs.UserID, vs.ChannelID)
+	log.Printf("🔊 User %s joined VC (Channel ID: %s, Channel Name: %s)", vs.UserID, vs.ChannelID, vs.ChannelID)
 
 	// Text-in-Voice機能の確認
 	// Discord APIでは、Text-in-Voice有効時、VCチャンネル自体にメッセージを送信できる
 	vcChannel, err := s.Channel(vs.ChannelID)
 	if err != nil {
-		log.Printf("❌ Failed to get VC channel: %v", err)
+		log.Printf("❌ Failed to get VC channel (ID: %s): %v", vs.ChannelID, err)
 		return
 	}
+
+	log.Printf("🎤 VC Details - Name: %s, Type: %d, LastMessageID: %s",
+		vcChannel.Name, vcChannel.Type, vcChannel.LastMessageID)
 
 	// VCチャンネルにlast_message_idがある場合、Text-in-Voice有効の可能性が高い
 	hasTextInVoice := vcChannel.LastMessageID != ""
@@ -76,13 +79,16 @@ func (b *Bot) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateU
 	var textChannelID string
 	if hasTextInVoice {
 		// Text-in-Voice有効: VCチャンネル自体にメッセージを送信
-		log.Printf("✅ Sending to VC channel (Text-in-Voice enabled): %s", vs.ChannelID)
+		log.Printf("✅ Sending to VC channel (Text-in-Voice enabled) - VC: %s (%s)", vs.ChannelID, vcChannel.Name)
 		textChannelID = vs.ChannelID
 	} else {
 		// Text-in-Voice無効: 通知チャンネルにフォールバック
-		log.Printf("🔄 Text-in-Voice not enabled, using notification channel fallback")
+		log.Printf("🔄 Text-in-Voice not enabled for VC %s (%s), using notification channel fallback (ID: %s)",
+			vs.ChannelID, vcChannel.Name, b.Config.NotificationChannelID)
 		textChannelID = b.Config.NotificationChannelID
 	}
+
+	log.Printf("📤 Target channel for introduction: %s", textChannelID)
 
 	// 自己紹介を取得して投稿
 	go b.sendIntroductionToVoiceChat(s, textChannelID, vs.Member, vs.ChannelID, vs.GuildID)

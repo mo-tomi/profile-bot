@@ -105,8 +105,11 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 		vcName = vcChannel.Name
 	}
 
-	// メンバー情報を取得
+	// メンバー情報を取得（優先順位: Nick > GlobalName > Username）
 	username := member.User.Username
+	if member.User.GlobalName != "" {
+		username = member.User.GlobalName
+	}
 	if member.Nick != "" {
 		username = member.Nick
 	}

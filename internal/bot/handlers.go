@@ -105,6 +105,22 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 		vcName = vcChannel.Name
 	}
 
+	// Botの権限を確認
+	perms, err := s.UserChannelPermissions(s.State.User.ID, channelID)
+	if err != nil {
+		log.Printf("⚠️  Failed to get channel permissions for channel %s: %v", channelID, err)
+	} else {
+		canSend := (perms & discordgo.PermissionSendMessages) == discordgo.PermissionSendMessages
+		canEmbed := (perms & discordgo.PermissionEmbedLinks) == discordgo.PermissionEmbedLinks
+		log.Printf("🔑 Bot permissions in channel %s: SendMessages=%v, EmbedLinks=%v (perms=%d)",
+			channelID, canSend, canEmbed, perms)
+
+		if !canSend {
+			log.Printf("❌ Bot does not have permission to send messages in channel %s", channelID)
+			return
+		}
+	}
+
 	// 完全なメンバー情報をAPIから取得
 	fullMember, err := s.GuildMember(guildID, member.User.ID)
 	if err != nil {
@@ -130,14 +146,19 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 	if err != nil || intro == nil {
 		// パターンC: 自己紹介なし（要件定義書 5.2節）
 		message := fmt.Sprintf("━━━━━━━━━━━━━━━━━━━\n👤 %s さんが入室しました\n\n⚠️ この方の自己紹介はまだ投稿されていません\n━━━━━━━━━━━━━━━━━━━", username)
-		
-		_, err = s.ChannelMessageSend(channelID, message)
+
+		sentMsg, err := s.ChannelMessageSend(channelID, message)
 		if err != nil {
-			log.Printf("❌ Failed to send introduction (no intro): %v", err)
+			log.Printf("❌ Failed to send introduction (no intro) to channel %s: %v", channelID, err)
+			log.Printf("❌ Error details: Type=%T, Message=%s", err, err.Error())
 			return
 		}
-		
-		log.Printf("✅ Sent 'no introduction' message for user %s", username)
+
+		if sentMsg != nil {
+			log.Printf("✅ Sent 'no introduction' message for user %s - Message ID: %s", username, sentMsg.ID)
+		} else {
+			log.Printf("⚠️  'No introduction' message sent but returned nil for user %s", username)
+		}
 		return
 	}
 
@@ -181,16 +202,22 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 	}
 
 	// メッセージ送信（Embed + ボタン）
-	_, err = s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+	sentMessage, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
 		Embeds:     []*discordgo.MessageEmbed{embed},
 		Components: components,
 	})
 	if err != nil {
-		log.Printf("❌ Failed to send introduction embed: %v", err)
+		log.Printf("❌ Failed to send introduction embed to channel %s: %v", channelID, err)
+		log.Printf("❌ Error details: Type=%T, Message=%s", err, err.Error())
 		return
 	}
 
-	log.Printf("✅ Introduction sent to voice chat (channel: %s) for user %s", channelID, username)
+	if sentMessage != nil {
+		log.Printf("✅ Introduction sent to voice chat (channel: %s) for user %s - Message ID: %s",
+			channelID, username, sentMessage.ID)
+	} else {
+		log.Printf("⚠️  Message sent but returned nil (channel: %s, user: %s)", channelID, username)
+	}
 }
 
 // getRoleInfo はメンバーのロール情報を取得する

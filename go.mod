@@ -3,7 +3,7 @@ module github.com/tomim/profile-bot
 go 1.23
 
 require (
-	github.com/bwmarrin/discordgo v0.27.1
+	github.com/bwmarrin/discordgo v0.28.1
 	github.com/jackc/pgx/v5 v5.5.0
 	github.com/robfig/cron/v3 v3.0.1
 	gopkg.in/yaml.v3 v3.0.1

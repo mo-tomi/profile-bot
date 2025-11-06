@@ -105,14 +105,24 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 		vcName = vcChannel.Name
 	}
 
+	// 完全なメンバー情報をAPIから取得
+	fullMember, err := s.GuildMember(guildID, member.User.ID)
+	if err != nil {
+		log.Printf("⚠️  Failed to fetch full member info: %v", err)
+		fullMember = member // フォールバック
+	}
+
 	// メンバー情報を取得（優先順位: Nick > GlobalName > Username）
-	username := member.User.Username
-	if member.User.GlobalName != "" {
-		username = member.User.GlobalName
+	username := fullMember.User.Username
+	if fullMember.User.GlobalName != "" {
+		username = fullMember.User.GlobalName
 	}
-	if member.Nick != "" {
-		username = member.Nick
+	if fullMember.Nick != "" {
+		username = fullMember.Nick
 	}
+
+	log.Printf("👤 Display name resolved: Username=%s, GlobalName=%s, Nick=%s → Final=%s",
+		fullMember.User.Username, fullMember.User.GlobalName, fullMember.Nick, username)
 
 	// 自己紹介を取得
 	intro, err := b.DB.GetIntroduction(ctx, member.User.ID)

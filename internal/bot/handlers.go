@@ -177,10 +177,14 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, channelID string
 	}
 
 	// ロール情報を取得
-	roleInfo := b.getRoleInfo(s, member, guildID)
+	roleInfo := b.getRoleInfo(s, fullMember, guildID)
+
+	// アバターURLを取得（サイズ256で高品質）
+	avatarURL := fullMember.User.AvatarURL("256")
+	log.Printf("🖼️  Avatar URL for user %s: %s", username, avatarURL)
 
 	// Embed作成（パターンAまたはB）
-	embed := b.createIntroductionEmbed(username, member.User.AvatarURL(""), vcName, introContent, intro, roleInfo, guildID)
+	embed := b.createIntroductionEmbed(username, avatarURL, vcName, introContent, intro, roleInfo, guildID)
 
 	// 元の自己紹介へのリンクボタンを作成
 	introLink := fmt.Sprintf("https://discord.com/channels/%s/%s/%s",

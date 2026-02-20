@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: profile-bot
+  labels:
+    app: profile-bot
+spec:
+  selector:
+    app: profile-bot
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  type: ClusterIP

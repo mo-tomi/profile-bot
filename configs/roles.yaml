@@ -48,8 +48,6 @@ role_categories:
     display_name: "【コミュニケーション】"
     emoji_prefix: true
     roles:
-      - name: "通話OK"
-        emoji: "📞"
       - name: "OKフレンド申請OK"
         emoji: "✅"
       - name: "NGフレンド申請NG"

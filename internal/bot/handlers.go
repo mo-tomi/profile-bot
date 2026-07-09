@@ -375,7 +375,7 @@ func (b *Bot) createIntroductionEmbed(username, avatarURL, vcName, introContent 
 	// 自己紹介本文（ヘッダーなし）
 	description.WriteString("\n")
 	description.WriteString(introContent)
-	description.WriteString("\n")
+	description.WriteString("\n\n")
 	description.WriteString("━━━━━━━━━━━━━━━━━━━")
 
 	embed := &discordgo.MessageEmbed{

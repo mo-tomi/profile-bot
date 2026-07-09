@@ -3,7 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -30,7 +30,7 @@ func NewDB(ctx context.Context, connString string) (*DB, error) {
 		return nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
-	log.Println("✅ Database connection established")
+	slog.Info("Database connection established")
 
 	return &DB{Pool: pool}, nil
 }
@@ -39,7 +39,7 @@ func NewDB(ctx context.Context, connString string) (*DB, error) {
 func (db *DB) Close() {
 	if db.Pool != nil {
 		db.Pool.Close()
-		log.Println("✅ Database connection closed")
+		slog.Info("Database connection closed")
 	}
 }
 
@@ -88,6 +88,6 @@ func (db *DB) InitTables(ctx context.Context) error {
 		return fmt.Errorf("failed to create indexes on daily_reminder_log: %w", err)
 	}
 
-	log.Println("✅ Database tables initialized")
+	slog.Info("Database tables initialized")
 	return nil
 }

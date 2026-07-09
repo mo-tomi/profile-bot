@@ -15,9 +15,10 @@ import (
 	"github.com/tomim/profile-bot/internal/database"
 )
 
-// initLogger は JSON ハンドラを使ってデフォルトの構造化ロガーを初期化します。
+// initLogger は構造化ロガーを初期化します。
 // 対応レベル: debug, info, warn, error
-func initLogger(logLevel string) {
+// 環境変数 LOG_FORMAT=json|text でハンドラーを切り替え（デフォルト: json）
+func initLogger(logLevel, logFormat string) {
 	lvl := slog.LevelInfo
 	switch strings.ToLower(strings.TrimSpace(logLevel)) {
 	case "debug":
@@ -32,14 +33,23 @@ func initLogger(logLevel string) {
 		lvl = slog.LevelInfo
 	}
 
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lvl})
+	opts := &slog.HandlerOptions{Level: lvl}
+
+	var handler slog.Handler
+	switch strings.ToLower(strings.TrimSpace(logFormat)) {
+	case "text":
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	default:
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	}
+
 	slog.SetDefault(slog.New(handler))
 }
 
 func main() {
-	// まずは環境変数から一時的にログレベルを読んでロガーを初期化し、続けて設定をロードして
-	// 最終的に `cfg.LogLevel` で再初期化します。
-	initLogger(os.Getenv("LOG_LEVEL"))
+	// まずは環境変数から一時的にログレベル/フォーマットを読んでロガーを初期化し、続けて設定をロードして
+	// 最終的に `cfg.LogLevel` / `cfg.LogFormat` で再初期化します。
+	initLogger(os.Getenv("LOG_LEVEL"), os.Getenv("LOG_FORMAT"))
 
 	// 設定読み込み
 	cfg, err := config.LoadConfig()
@@ -48,8 +58,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 設定中のログレベルでロガーを再初期化
-	initLogger(cfg.LogLevel)
+	// 設定中のログレベル/フォーマットでロガーを再初期化
+	initLogger(cfg.LogLevel, cfg.LogFormat)
 
 	slog.Info("🚀 Starting Profile Bot...")
 	slog.Info("Config loaded", "environment", cfg.Environment, "log_level", cfg.LogLevel)

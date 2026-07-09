@@ -1,7 +1,7 @@
 package bot
 
 import (
-	"log"
+	"log/slog"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -22,9 +22,9 @@ func (b *Bot) registerCommands(s *discordgo.Session) {
 	for _, cmd := range commands {
 		_, err := s.ApplicationCommandCreate(s.State.User.ID, "", cmd)
 		if err != nil {
-			log.Printf("❌ Failed to create command '%s': %v", cmd.Name, err)
+			slog.Error("Failed to create command", "command", cmd.Name, "error", err.Error())
 		} else {
-			log.Printf("✅ Registered slash command: /%s", cmd.Name)
+			slog.Info("Registered slash command", "command", cmd.Name)
 		}
 	}
 }
@@ -52,7 +52,7 @@ func (b *Bot) handleProfileBotCommand(s *discordgo.Session, i *discordgo.Interac
 	})
 
 	if err != nil {
-		log.Printf("❌ Failed to respond to interaction: %v", err)
+		slog.Error("Failed to respond to interaction", "error", err.Error())
 		return
 	}
 
@@ -60,7 +60,7 @@ func (b *Bot) handleProfileBotCommand(s *discordgo.Session, i *discordgo.Interac
 	result, err := b.ExecuteReminderManually()
 	if err != nil {
 		result = "❌ エラーが発生しました: " + err.Error()
-		log.Printf("❌ /profilebot command error: %v", err)
+		slog.Error("/profilebot command error", "error", err.Error())
 	}
 
 	// 結果を返信
@@ -69,11 +69,11 @@ func (b *Bot) handleProfileBotCommand(s *discordgo.Session, i *discordgo.Interac
 	})
 
 	if err != nil {
-		log.Printf("❌ Failed to edit interaction response: %v", err)
+		slog.Error("Failed to edit interaction response", "error", err.Error())
 		return
 	}
 
-	log.Printf("✅ /profilebot command executed by user %s", i.Member.User.Username)
+	slog.Info("/profilebot command executed", "user", i.Member.User.Username)
 }
 
 // ptrString は文字列のポインタを返すヘルパー関数

@@ -3,10 +3,8 @@ package bot
 import (
 	"context"
 	"fmt"
-	"log"
-	"strings"
-
 	"log/slog"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/tomim/profile-bot/internal/database"
@@ -187,7 +185,7 @@ func (b *Bot) getRoleInfo(s *discordgo.Session, member *discordgo.Member, guildI
 	// ギルド情報を取得
 	guild, err := s.Guild(guildID)
 	if err != nil {
-		log.Printf("❌ Failed to get guild (ID: %s): %v", guildID, err)
+		slog.Error("Failed to get guild", "guild_id", guildID, "error", err.Error())
 		return roleInfo
 	}
 
@@ -271,7 +269,7 @@ func (b *Bot) assignIntroducedRole(s *discordgo.Session, guildID, userID string)
 	// ギルド情報を取得
 	guild, err := s.Guild(guildID)
 	if err != nil {
-		log.Printf("⚠️  Failed to get guild for role assignment: %v", err)
+		slog.Warn("Failed to get guild for role assignment", "error", err.Error())
 		return
 	}
 
@@ -285,18 +283,18 @@ func (b *Bot) assignIntroducedRole(s *discordgo.Session, guildID, userID string)
 	}
 
 	if roleID == "" {
-		log.Printf("⚠️  Role '%s' not found in guild", b.Config.IntroducedRoleName)
+		slog.Warn("Role not found in guild", "role_name", b.Config.IntroducedRoleName)
 		return
 	}
 
 	// ロールを付与
 	err = s.GuildMemberRoleAdd(guildID, userID, roleID)
 	if err != nil {
-		log.Printf("⚠️  Failed to assign role: %v", err)
+		slog.Warn("Failed to assign role", "error", err.Error())
 		return
 	}
 
-	log.Printf("✅ Assigned '%s' role to user %s", b.Config.IntroducedRoleName, userID)
+	slog.Info("Assigned role to user", "role_name", b.Config.IntroducedRoleName, "user_id", userID)
 }
 
 // contains は文字列スライスに指定の文字列が含まれているかチェックする

@@ -3,7 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -24,9 +24,9 @@ func AcquireAdvisoryLock(ctx context.Context, pool *pgxpool.Pool, lockKey string
 	}
 
 	if acquired {
-		log.Printf("✅ Advisory lock acquired: %s", lockKey)
+		slog.Info("Advisory lock acquired", "lock_key", lockKey)
 	} else {
-		log.Printf("⏭️  Advisory lock busy (another pod is running): %s", lockKey)
+		slog.Info("Advisory lock busy (another pod is running)", "lock_key", lockKey)
 	}
 
 	return acquired, nil
@@ -43,9 +43,9 @@ func ReleaseAdvisoryLock(ctx context.Context, pool *pgxpool.Pool, lockKey string
 	}
 
 	if released {
-		log.Printf("🔓 Advisory lock released: %s", lockKey)
+		slog.Info("Advisory lock released", "lock_key", lockKey)
 	} else {
-		log.Printf("⚠️  Advisory lock was not held: %s", lockKey)
+		slog.Warn("Advisory lock was not held", "lock_key", lockKey)
 	}
 
 	return nil

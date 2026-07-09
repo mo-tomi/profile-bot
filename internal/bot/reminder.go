@@ -3,7 +3,7 @@ package bot
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -20,19 +20,19 @@ func (b *Bot) StartWeeklyReminder() {
 
 	// 毎週月曜10:00に実行
 	_, err := c.AddFunc("0 10 * * MON", func() {
-		log.Println("⏰ Weekly reminder cron triggered")
+		slog.Info("Weekly reminder cron triggered")
 		if err := b.ExecuteWeeklyReminder(); err != nil {
-			log.Printf("❌ Failed to execute weekly reminder: %v", err)
+			slog.Error("Failed to execute weekly reminder", "error", err.Error())
 		}
 	})
 
 	if err != nil {
-		log.Printf("❌ Failed to schedule weekly reminder: %v", err)
+		slog.Error("Failed to schedule weekly reminder", "error", err.Error())
 		return
 	}
 
 	c.Start()
-	log.Println("✅ Weekly reminder scheduler started")
+	slog.Info("Weekly reminder scheduler started")
 }
 
 // ExecuteWeeklyReminder は週次リマインダーを実行する（重複防止機能付き）
@@ -47,14 +47,14 @@ func (b *Bot) ExecuteWeeklyReminder() error {
 
 	if !acquired {
 		// 別のPodが実行中なのでスキップ
-		log.Println("⏭️  Another pod is executing weekly reminder, skipping")
+		slog.Info("Another pod is executing weekly reminder, skipping")
 		return nil
 	}
 
 	// 2. 必ずロックを解放（defer）
 	defer func() {
 		if err := database.ReleaseAdvisoryLock(ctx, b.DB.Pool, "weekly_reminder"); err != nil {
-			log.Printf("❌ Failed to release advisory lock: %v", err)
+			slog.Error("Failed to release advisory lock", "error", err.Error())
 		}
 	}()
 
@@ -66,12 +66,12 @@ func (b *Bot) ExecuteWeeklyReminder() error {
 	}
 
 	if executed {
-		log.Println("📅 Reminder already executed today")
+		slog.Info("Reminder already executed today")
 		return nil
 	}
 
 	// 4. リマインダー実行
-	log.Println("📢 Executing weekly reminder...")
+	slog.Info("Executing weekly reminder")
 	notifiedUserIDs, err := b.executeReminderInternal(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to execute reminder: %w", err)
@@ -83,7 +83,7 @@ func (b *Bot) ExecuteWeeklyReminder() error {
 		return fmt.Errorf("failed to log reminder execution: %w", err)
 	}
 
-	log.Printf("✅ Weekly reminder completed successfully (%d users notified)", len(notifiedUserIDs))
+	slog.Info("Weekly reminder completed successfully", "notified_users", len(notifiedUserIDs))
 	return nil
 }
 
@@ -123,7 +123,7 @@ func (b *Bot) executeReminderInternal(ctx context.Context) ([]string, error) {
 
 	// 全員が自己紹介済みの場合
 	if len(membersWithoutIntro) == 0 {
-		log.Println("🎉 All members have posted their introductions!")
+		slog.Info("All members have posted their introductions")
 		return []string{}, nil
 	}
 
@@ -159,7 +159,7 @@ func (b *Bot) executeReminderInternal(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to send reminder message: %w", err)
 	}
 
-	log.Printf("✅ Reminder message sent to %d members", len(membersWithoutIntro))
+	slog.Info("Reminder message sent", "members", len(membersWithoutIntro))
 	return membersWithoutIntro, nil
 }
 
@@ -201,7 +201,7 @@ func (b *Bot) ExecuteReminderManually() (string, error) {
 
 	defer func() {
 		if err := database.ReleaseAdvisoryLock(ctx, b.DB.Pool, "weekly_reminder"); err != nil {
-			log.Printf("❌ Failed to release advisory lock: %v", err)
+			slog.Error("Failed to release advisory lock", "error", err.Error())
 		}
 	}()
 

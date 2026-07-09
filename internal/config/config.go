@@ -25,6 +25,7 @@ type Config struct {
 
 	// アプリケーション設定
 	LogLevel    string
+	LogFormat   string
 	Environment string
 	Port        string
 
@@ -43,6 +44,7 @@ func LoadConfig() (*Config, error) {
 		NotificationChannelID: getEnvOrDefault("NOTIFICATION_CHANNEL_ID", "1331177944244289598"),
 		DatabaseURL:           strings.TrimSpace(os.Getenv("DATABASE_URL")),
 		LogLevel:              getEnvOrDefault("LOG_LEVEL", "info"),
+		LogFormat:             getEnvOrDefault("LOG_FORMAT", "json"),
 		Environment:           getEnvOrDefault("ENVIRONMENT", "production"),
 		Port:                  getEnvOrDefault("PORT", "8080"),
 		RolesConfigPath:       getEnvOrDefault("ROLES_CONFIG_PATH", "configs/roles.yaml"),

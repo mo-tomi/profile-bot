@@ -57,6 +57,39 @@ role_categories:
       - name: "フレンド申請(要相談)"
         emoji: "⚠️"
 
+  - name: "年代"
+    display_name: "【年代】"
+    emoji_prefix: true
+    roles:
+      - name: "10代"
+        emoji: "1️⃣"
+      - name: "20代"
+        emoji: "2️⃣"
+      - name: "30代"
+        emoji: "3️⃣"
+      - name: "40代"
+        emoji: "4️⃣"
+
+  - name: "住まい"
+    display_name: "【住まい】"
+    emoji_prefix: true
+    roles:
+      - name: "実家暮らし"
+        emoji: "🏠"
+      - name: "グループホーム"
+        emoji: "🏘️"
+      - name: "シェアハウス(同居・同棲)"
+        emoji: "👥"
+      - name: "一人暮らし"
+        emoji: "🛋️"
+
+  - name: "パートナー"
+    display_name: "【パートナー】"
+    emoji_prefix: true
+    roles:
+      - name: "既婚・パートナーいます"
+        emoji: "👫"
+
 # 除外するロール名
 excluded_roles:
   - "@everyone"

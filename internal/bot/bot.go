@@ -53,6 +53,9 @@ func NewBot(cfg *config.Config, rolesConfig *config.RolesConfig, db *database.DB
 	// イベントハンドラー登録
 	session.AddHandler(bot.onReady)
 	session.AddHandler(bot.onMessageCreate)
+	session.AddHandler(bot.onMessageUpdate)
+	session.AddHandler(bot.onMessageDelete)
+	session.AddHandler(bot.onMessageDeleteBulk)
 	session.AddHandler(bot.onVoiceStateUpdate)
 
 	return bot, nil

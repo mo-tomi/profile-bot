@@ -37,6 +37,85 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	go b.assignIntroducedRole(s, m.GuildID, m.Author.ID)
 }
 
+// onMessageUpdate は自己紹介チャンネルでメッセージが編集された時に実行されるハンドラー
+// 本文はDiscord APIから都度取得しているため実質no-opだが、DB上のレコードを最新化しておく
+func (b *Bot) onMessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
+	if m.Author == nil || m.Author.Bot {
+		return
+	}
+
+	if m.ChannelID != b.Config.IntroductionChannelID {
+		return
+	}
+
+	ctx := context.Background()
+
+	if err := b.DB.SaveIntroduction(ctx, m.Author.ID, m.ChannelID, m.ID); err != nil {
+		slog.Error("Failed to update introduction on message edit", "error", err.Error(), "user_id", m.Author.ID)
+	}
+}
+
+// onMessageDelete は自己紹介チャンネルでメッセージが削除された時に実行されるハンドラー
+func (b *Bot) onMessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
+	if m.ChannelID != b.Config.IntroductionChannelID {
+		return
+	}
+
+	b.handleIntroductionMessageDeleted(s, m.GuildID, m.ID)
+}
+
+// onMessageDeleteBulk は自己紹介チャンネルでメッセージが一括削除された時に実行されるハンドラー
+func (b *Bot) onMessageDeleteBulk(s *discordgo.Session, m *discordgo.MessageDeleteBulk) {
+	if m.ChannelID != b.Config.IntroductionChannelID {
+		return
+	}
+
+	for _, messageID := range m.Messages {
+		b.handleIntroductionMessageDeleted(s, m.GuildID, messageID)
+	}
+}
+
+// handleIntroductionMessageDeleted はDBを message_id で逆引きし、該当レコードを削除する。
+// MessageDelete イベントには Author が含まれないことがあるため、DB側から user_id を特定する。
+// 削除後、同ユーザーの自己紹介が他に残っていなければ「自己紹介済み」ロールを剥奪する。
+func (b *Bot) handleIntroductionMessageDeleted(s *discordgo.Session, guildID, messageID string) {
+	ctx := context.Background()
+
+	intro, err := b.DB.GetIntroductionByMessageID(ctx, messageID)
+	if err != nil {
+		slog.Error("Failed to look up introduction by message id", "error", err.Error(), "message_id", messageID)
+		return
+	}
+	if intro == nil {
+		// このメッセージは自己紹介として保存されていない
+		return
+	}
+
+	if err := b.DB.DeleteIntroductionByMessageID(ctx, messageID); err != nil {
+		slog.Error("Failed to delete introduction", "error", err.Error(), "message_id", messageID, "user_id", intro.UserID)
+		return
+	}
+
+	slog.Info("Deleted introduction due to message delete", "user_id", intro.UserID, "message_id", messageID)
+
+	// 同ユーザーの自己紹介が他に残っていれば剥奪しない
+	hasOther, err := b.DB.HasIntroduction(ctx, intro.UserID)
+	if err != nil {
+		slog.Error("Failed to check remaining introductions", "error", err.Error(), "user_id", intro.UserID)
+		return
+	}
+	if hasOther {
+		return
+	}
+
+	if guildID == "" {
+		slog.Warn("Cannot remove introduced role: guild_id is empty", "user_id", intro.UserID)
+		return
+	}
+
+	b.removeIntroducedRole(s, guildID, intro.UserID)
+}
+
 // onVoiceStateUpdate はVC入退室時に実行されるハンドラー
 func (b *Bot) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
 	// VC入室検知（BeforeUpdateがnilまたはチャンネルが変わった場合）
@@ -264,6 +343,16 @@ func (b *Bot) createIntroductionEmbed(username, avatarURL, vcName, introContent 
 	return embed
 }
 
+// findRoleIDByName はギルド内から指定ロール名のロールIDを検索する
+func findRoleIDByName(guild *discordgo.Guild, roleName string) string {
+	for _, role := range guild.Roles {
+		if role.Name == roleName {
+			return role.ID
+		}
+	}
+	return ""
+}
+
 // assignIntroducedRole は「自己紹介済み」ロールを付与する
 func (b *Bot) assignIntroducedRole(s *discordgo.Session, guildID, userID string) {
 	// ギルド情報を取得
@@ -273,15 +362,7 @@ func (b *Bot) assignIntroducedRole(s *discordgo.Session, guildID, userID string)
 		return
 	}
 
-	// ロールを検索
-	var roleID string
-	for _, role := range guild.Roles {
-		if role.Name == b.Config.IntroducedRoleName {
-			roleID = role.ID
-			break
-		}
-	}
-
+	roleID := findRoleIDByName(guild, b.Config.IntroducedRoleName)
 	if roleID == "" {
 		slog.Warn("Role not found in guild", "role_name", b.Config.IntroducedRoleName)
 		return
@@ -295,6 +376,31 @@ func (b *Bot) assignIntroducedRole(s *discordgo.Session, guildID, userID string)
 	}
 
 	slog.Info("Assigned role to user", "role_name", b.Config.IntroducedRoleName, "user_id", userID)
+}
+
+// removeIntroducedRole は「自己紹介済み」ロールを剥奪する
+func (b *Bot) removeIntroducedRole(s *discordgo.Session, guildID, userID string) {
+	// ギルド情報を取得
+	guild, err := s.Guild(guildID)
+	if err != nil {
+		slog.Warn("Failed to get guild for role removal", "error", err.Error())
+		return
+	}
+
+	roleID := findRoleIDByName(guild, b.Config.IntroducedRoleName)
+	if roleID == "" {
+		slog.Warn("Role not found in guild", "role_name", b.Config.IntroducedRoleName)
+		return
+	}
+
+	// ロールを剥奪
+	err = s.GuildMemberRoleRemove(guildID, userID, roleID)
+	if err != nil {
+		slog.Warn("Failed to remove role", "error", err.Error())
+		return
+	}
+
+	slog.Info("Removed role from user", "role_name", b.Config.IntroducedRoleName, "user_id", userID)
 }
 
 // contains は文字列スライスに指定の文字列が含まれているかチェックする

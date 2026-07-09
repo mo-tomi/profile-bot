@@ -63,6 +63,44 @@ func (db *DB) GetIntroduction(ctx context.Context, userID string) (*Introduction
 	return &intro, nil
 }
 
+// GetIntroductionByMessageID は指定メッセージIDに対応する自己紹介を取得する
+func (db *DB) GetIntroductionByMessageID(ctx context.Context, messageID string) (*Introduction, error) {
+	query := `
+		SELECT user_id, channel_id, message_id, created_at
+		FROM introductions
+		WHERE message_id = $1
+	`
+
+	var intro Introduction
+	err := db.Pool.QueryRow(ctx, query, messageID).Scan(
+		&intro.UserID,
+		&intro.ChannelID,
+		&intro.MessageID,
+		&intro.CreatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get introduction by message id: %w", err)
+	}
+
+	return &intro, nil
+}
+
+// DeleteIntroductionByMessageID は指定メッセージIDに対応する自己紹介を削除する
+func (db *DB) DeleteIntroductionByMessageID(ctx context.Context, messageID string) error {
+	query := `DELETE FROM introductions WHERE message_id = $1`
+
+	_, err := db.Pool.Exec(ctx, query, messageID)
+	if err != nil {
+		return fmt.Errorf("failed to delete introduction by message id: %w", err)
+	}
+
+	return nil
+}
+
 // GetIntroductionCount は自己紹介の総数を取得する
 func (db *DB) GetIntroductionCount(ctx context.Context) (int, error) {
 	var count int

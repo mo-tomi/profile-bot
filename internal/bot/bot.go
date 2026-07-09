@@ -112,7 +112,7 @@ func (b *Bot) IsHealthy() bool {
 	}
 
 	// Discord接続状態をチェック
-	if b.Session.DataReady == false {
+	if !b.Session.DataReady {
 		return false
 	}
 

@@ -19,7 +19,7 @@ import (
 // 対応レベル: debug, info, warn, error
 // 環境変数 LOG_FORMAT=json|text でハンドラーを切り替え（デフォルト: json）
 func initLogger(logLevel, logFormat string) {
-	lvl := slog.LevelInfo
+	var lvl slog.Level
 	switch strings.ToLower(strings.TrimSpace(logLevel)) {
 	case "debug":
 		lvl = slog.LevelDebug
@@ -148,20 +148,20 @@ func startHealthCheckServer(bot *bot.Bot, port string) *http.Server {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		if bot.IsHealthy() {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte("Unhealthy"))
+			_, _ = w.Write([]byte("Unhealthy"))
 		}
 	})
 
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		if bot.IsReady() {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Ready"))
+			_, _ = w.Write([]byte("Ready"))
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte("Not ready"))
+			_, _ = w.Write([]byte("Not ready"))
 		}
 	})
 

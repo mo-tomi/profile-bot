@@ -352,7 +352,7 @@ func (b *Bot) createIntroductionEmbed(username, avatarURL, vcName, introContent 
 
 	// ヘッダー
 	description.WriteString("━━━━━━━━━━━━━━━━━━━\n")
-	description.WriteString(fmt.Sprintf("👤 %s さんが入室しました\n", username))
+	fmt.Fprintf(&description, "👤 %s さんが入室しました\n", username)
 
 	// ロール情報がある場合
 	if len(roleInfo) > 0 {
@@ -361,9 +361,9 @@ func (b *Bot) createIntroductionEmbed(username, avatarURL, vcName, introContent 
 		// RolesConfigの順序でカテゴリを表示
 		for _, category := range b.RolesConfig.RoleCategories {
 			if roles, exists := roleInfo[category.DisplayName]; exists && len(roles) > 0 {
-				description.WriteString(fmt.Sprintf("%s\n", category.DisplayName))
+				fmt.Fprintf(&description, "%s\n", category.DisplayName)
 				for _, role := range roles {
-					description.WriteString(fmt.Sprintf("%s\n", role))
+					fmt.Fprintf(&description, "%s\n", role)
 				}
 				description.WriteString("\n")
 			}

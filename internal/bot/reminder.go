@@ -141,15 +141,14 @@ func (b *Bot) executeReminderInternal(ctx context.Context) ([]string, error) {
 	message.WriteString("🌟 **自己紹介のお知らせ** 🌟\n\n")
 
 	if len(membersWithoutIntro) > maxDisplay {
-		message.WriteString(fmt.Sprintf("**%s ほか%d名の皆さん**\n\n",
+		fmt.Fprintf(&message, "**%s ほか%d名の皆さん**\n\n",
 			strings.Join(memberNames, ", "),
-			len(membersWithoutIntro)-maxDisplay))
+			len(membersWithoutIntro)-maxDisplay)
 	} else {
-		message.WriteString(fmt.Sprintf("**%s の皆さん**\n\n",
-			strings.Join(memberNames, ", ")))
+		fmt.Fprintf(&message, "**%s の皆さん**\n\n", strings.Join(memberNames, ", "))
 	}
 
-	message.WriteString(fmt.Sprintf("こんにちは！<#%s> チャンネルでの自己紹介をお待ちしています！\n", introChannel.ID))
+	fmt.Fprintf(&message, "こんにちは！<#%s> チャンネルでの自己紹介をお待ちしています！\n", introChannel.ID)
 	message.WriteString("書ける範囲で構いませんので、あなたのことを教えてください 😊\n")
 	message.WriteString("趣味、好きなこと、最近気になっていることなど、何でも大丈夫です！")
 

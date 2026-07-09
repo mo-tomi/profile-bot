@@ -12,6 +12,12 @@ import (
 	"github.com/tomim/profile-bot/internal/database"
 )
 
+// sentMessage はVC入室通知として送信したメッセージの位置を表す
+type sentMessage struct {
+	ChannelID string
+	MessageID string
+}
+
 // Bot はDiscord botの本体
 type Bot struct {
 	Session     *discordgo.Session
@@ -21,6 +27,11 @@ type Bot struct {
 	Ready       bool
 	// readyOnce は onReady の初期化処理を一度だけ行うための同期プリミティブ
 	readyOnce sync.Once
+
+	// vcMessages はVC入室通知として送信したメッセージを guildID:userID 単位で追跡する
+	// (退室時に削除するため。Pod再起動で消えても実害は古い通知が残る程度)
+	vcMessages   map[string][]sentMessage
+	vcMessagesMu sync.Mutex
 }
 
 // NewBot は新しいBotインスタンスを作成する
@@ -48,6 +59,7 @@ func NewBot(cfg *config.Config, rolesConfig *config.RolesConfig, db *database.DB
 		RolesConfig: rolesConfig,
 		DB:          db,
 		Ready:       false,
+		vcMessages:  make(map[string][]sentMessage),
 	}
 
 	// イベントハンドラー登録

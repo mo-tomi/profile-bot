@@ -84,3 +84,48 @@ func TestCreateIntroductionEmbed_NoRoles(t *testing.T) {
 		t.Errorf("embed description missing intro content: %q", embed.Description)
 	}
 }
+
+func TestVCMessageKey(t *testing.T) {
+	got := vcMessageKey("guild-1", "user-1")
+	want := "guild-1:user-1"
+	if got != want {
+		t.Errorf("vcMessageKey() = %q, want %q", got, want)
+	}
+}
+
+func TestTrackVCMessage(t *testing.T) {
+	t.Run("records message when DeleteOnLeave is enabled", func(t *testing.T) {
+		b := &Bot{
+			Config:     &config.Config{DeleteOnLeave: true},
+			vcMessages: make(map[string][]sentMessage),
+		}
+
+		b.trackVCMessage("guild-1", "user-1", "channel-1", "message-1")
+		b.trackVCMessage("guild-1", "user-1", "channel-2", "message-2")
+
+		key := vcMessageKey("guild-1", "user-1")
+		got := b.vcMessages[key]
+		if len(got) != 2 {
+			t.Fatalf("expected 2 tracked messages, got %d: %+v", len(got), got)
+		}
+		if got[0] != (sentMessage{ChannelID: "channel-1", MessageID: "message-1"}) {
+			t.Errorf("unexpected first tracked message: %+v", got[0])
+		}
+		if got[1] != (sentMessage{ChannelID: "channel-2", MessageID: "message-2"}) {
+			t.Errorf("unexpected second tracked message: %+v", got[1])
+		}
+	})
+
+	t.Run("does nothing when DeleteOnLeave is disabled", func(t *testing.T) {
+		b := &Bot{
+			Config:     &config.Config{DeleteOnLeave: false},
+			vcMessages: make(map[string][]sentMessage),
+		}
+
+		b.trackVCMessage("guild-1", "user-1", "channel-1", "message-1")
+
+		if len(b.vcMessages) != 0 {
+			t.Errorf("expected no tracked messages, got %+v", b.vcMessages)
+		}
+	})
+}

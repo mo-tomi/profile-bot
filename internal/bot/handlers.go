@@ -118,12 +118,18 @@ func (b *Bot) handleIntroductionMessageDeleted(s *discordgo.Session, guildID, me
 
 // onVoiceStateUpdate はVC入退室時に実行されるハンドラー
 func (b *Bot) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
-	// VC入室検知（BeforeUpdateがnilまたはチャンネルが変わった場合）
+	// ミュート/ミュート解除など、チャンネルが変わらないイベントは無視
 	if vs.BeforeUpdate != nil && vs.BeforeUpdate.ChannelID == vs.ChannelID {
-		return // 退室またはミュート/ミュート解除など
+		return
 	}
 
-	// 退室の場合はスキップ
+	// 退室 or 別チャンネルへの移動を検知したら、元VCへ送った入室通知を削除する
+	if b.Config.DeleteOnLeave && vs.BeforeUpdate != nil && vs.BeforeUpdate.ChannelID != "" &&
+		vs.BeforeUpdate.ChannelID != vs.ChannelID && contains(b.Config.TargetVoiceChannels, vs.BeforeUpdate.ChannelID) {
+		go b.deleteTrackedVCMessages(s, vs.GuildID, vs.UserID)
+	}
+
+	// 退室の場合は新規入室先がないためここで終了
 	if vs.ChannelID == "" {
 		return
 	}
@@ -143,6 +149,43 @@ func (b *Bot) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateU
 
 	// 直接VCチャットに送信を試み、失敗時のみ通知チャンネルへフォールバックする。
 	go b.sendIntroductionToVoiceChat(s, vs.ChannelID, vs.Member, vs.GuildID, b.Config.NotificationChannelID)
+}
+
+// vcMessageKey はguildIDとuserIDから追跡マップのキーを生成する
+func vcMessageKey(guildID, userID string) string {
+	return guildID + ":" + userID
+}
+
+// trackVCMessage はVC入室通知として送信したメッセージを追跡マップに記録する
+// DELETE_ON_LEAVEが無効な場合は何もしない
+func (b *Bot) trackVCMessage(guildID, userID, channelID, messageID string) {
+	if !b.Config.DeleteOnLeave {
+		return
+	}
+
+	b.vcMessagesMu.Lock()
+	defer b.vcMessagesMu.Unlock()
+
+	key := vcMessageKey(guildID, userID)
+	b.vcMessages[key] = append(b.vcMessages[key], sentMessage{ChannelID: channelID, MessageID: messageID})
+}
+
+// deleteTrackedVCMessages はユーザーの退室/移動時に、追跡していた入室通知メッセージを削除する
+func (b *Bot) deleteTrackedVCMessages(s *discordgo.Session, guildID, userID string) {
+	key := vcMessageKey(guildID, userID)
+
+	b.vcMessagesMu.Lock()
+	messages := b.vcMessages[key]
+	delete(b.vcMessages, key)
+	b.vcMessagesMu.Unlock()
+
+	for _, msg := range messages {
+		if err := s.ChannelMessageDelete(msg.ChannelID, msg.MessageID); err != nil {
+			slog.Warn("Failed to delete tracked VC message", "error", err.Error(), "channel_id", msg.ChannelID, "message_id", msg.MessageID)
+			continue
+		}
+		slog.Info("Deleted VC introduction message on leave", "user_id", userID, "channel_id", msg.ChannelID, "message_id", msg.MessageID)
+	}
 }
 
 // sendIntroductionToVoiceChat はVCのテキストチャットに自己紹介を投稿する
@@ -186,16 +229,19 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, voiceChannelID s
 		message := fmt.Sprintf("━━━━━━━━━━━━━━━━━━━\n👤 %s さんが入室しました\n\n⚠️ この方の自己紹介はまだ投稿されていません\n━━━━━━━━━━━━━━━━━━━", username)
 
 		// まずVCチャットへ送信を試みる
-		if _, err := s.ChannelMessageSend(voiceChannelID, message); err == nil {
+		if sent, err := s.ChannelMessageSend(voiceChannelID, message); err == nil {
+			b.trackVCMessage(guildID, member.User.ID, voiceChannelID, sent.ID)
 			slog.Info("Sent 'no introduction' message to VC", "voice_channel_id", voiceChannelID, "user", username)
 			return
 		} else {
 			// 失敗した場合のみ通知チャンネルへフォールバック（VC名を先頭に付与）
 			fallbackMessage := fmt.Sprintf("🔊 **%s** に入室しました\n\n%s", vcName, message)
-			if _, err := s.ChannelMessageSend(fallbackChannelID, fallbackMessage); err != nil {
+			sent, err := s.ChannelMessageSend(fallbackChannelID, fallbackMessage)
+			if err != nil {
 				slog.Error("Failed to send 'no introduction' fallback message", "fallback_channel", fallbackChannelID, "error", err.Error())
 				return
 			}
+			b.trackVCMessage(guildID, member.User.ID, fallbackChannelID, sent.ID)
 			slog.Info("Sent 'no introduction' message to fallback channel", "fallback_channel", fallbackChannelID, "user", username)
 			return
 		}
@@ -242,16 +288,19 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, voiceChannelID s
 	}
 
 	// まずVCチャットへ送信を試みる
-	if _, err := s.ChannelMessageSendComplex(voiceChannelID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{embed}, Components: components}); err == nil {
+	if sent, err := s.ChannelMessageSendComplex(voiceChannelID, &discordgo.MessageSend{Embeds: []*discordgo.MessageEmbed{embed}, Components: components}); err == nil {
+		b.trackVCMessage(guildID, member.User.ID, voiceChannelID, sent.ID)
 		slog.Info("Sent introduction embed to VC", "voice_channel_id", voiceChannelID, "user", username)
 		return
 	} else {
 		// 失敗した場合のみ通知チャンネルへフォールバック（VC名を先頭に付与）
 		fallbackPrefix := fmt.Sprintf("🔊 **%s** に入室しました\n\n", vcName)
-		if _, err := s.ChannelMessageSendComplex(fallbackChannelID, &discordgo.MessageSend{Content: fallbackPrefix, Embeds: []*discordgo.MessageEmbed{embed}, Components: components}); err != nil {
+		sent, err := s.ChannelMessageSendComplex(fallbackChannelID, &discordgo.MessageSend{Content: fallbackPrefix, Embeds: []*discordgo.MessageEmbed{embed}, Components: components})
+		if err != nil {
 			slog.Error("Failed to send introduction embed to fallback channel", "fallback_channel", fallbackChannelID, "error", err.Error())
 			return
 		}
+		b.trackVCMessage(guildID, member.User.ID, fallbackChannelID, sent.ID)
 		slog.Info("Sent introduction embed to fallback channel", "fallback_channel", fallbackChannelID, "user", username)
 		return
 	}

@@ -34,6 +34,9 @@ type Config struct {
 
 	// 自己紹介済みロール名
 	IntroducedRoleName string
+
+	// VC退室時に入室通知メッセージを自動削除するか
+	DeleteOnLeave bool
 }
 
 // LoadConfig は環境変数からアプリケーション設定を読み込む
@@ -49,6 +52,7 @@ func LoadConfig() (*Config, error) {
 		Port:                  getEnvOrDefault("PORT", "8080"),
 		RolesConfigPath:       getEnvOrDefault("ROLES_CONFIG_PATH", "configs/roles.yaml"),
 		IntroducedRoleName:    getEnvOrDefault("INTRODUCED_ROLE_NAME", "自己紹介済み"),
+		DeleteOnLeave:         getEnvAsBool("DELETE_ON_LEAVE", true),
 	}
 
 	// 必須環境変数のチェック
@@ -106,6 +110,16 @@ func getEnvAsInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
+		}
+	}
+	return defaultValue
+}
+
+// getEnvAsBool は環境変数を真偽値として取得し、存在しない・変換できない場合はデフォルト値を返す
+func getEnvAsBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
 		}
 	}
 	return defaultValue

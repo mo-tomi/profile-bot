@@ -46,6 +46,35 @@ func TestGetEnvAsInt(t *testing.T) {
 	})
 }
 
+func TestGetEnvAsBool(t *testing.T) {
+	t.Run("returns parsed true when set", func(t *testing.T) {
+		t.Setenv("TEST_ENV_BOOL_KEY", "true")
+		if got := getEnvAsBool("TEST_ENV_BOOL_KEY", false); got != true {
+			t.Errorf("got %v, want %v", got, true)
+		}
+	})
+
+	t.Run("returns parsed false when set", func(t *testing.T) {
+		t.Setenv("TEST_ENV_BOOL_KEY", "false")
+		if got := getEnvAsBool("TEST_ENV_BOOL_KEY", true); got != false {
+			t.Errorf("got %v, want %v", got, false)
+		}
+	})
+
+	t.Run("returns default when unset", func(t *testing.T) {
+		if got := getEnvAsBool("TEST_ENV_BOOL_KEY_UNSET", true); got != true {
+			t.Errorf("got %v, want %v", got, true)
+		}
+	})
+
+	t.Run("returns default when not a valid bool", func(t *testing.T) {
+		t.Setenv("TEST_ENV_BOOL_KEY_INVALID", "not-a-bool")
+		if got := getEnvAsBool("TEST_ENV_BOOL_KEY_INVALID", true); got != true {
+			t.Errorf("got %v, want %v", got, true)
+		}
+	})
+}
+
 func TestLoadConfig_MissingRequiredEnv(t *testing.T) {
 	t.Run("missing DISCORD_TOKEN", func(t *testing.T) {
 		t.Setenv("DISCORD_TOKEN", "")

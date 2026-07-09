@@ -164,6 +164,8 @@ kubectl logs -f profile-bot-xxxx-yyyy
 
 Python版から移行する場合、既存のデータベーステーブルはそのまま使用できます。
 
+Python版のコードは `archive/python/` に保存されていますが、**メンテナンス対象外**です。現行の実装は `internal/` 配下のGo言語版のみを対象とします。
+
 ### データベーススキーマ
 
 - `introductions`: 自己紹介データ（変更なし）

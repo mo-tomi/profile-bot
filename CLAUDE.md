@@ -203,6 +203,29 @@ profile-bot/
         └── configmap.yaml
 ```
 
+### Registered Event Handlers (internal/bot)
+
+Registered in `NewBot()` (`internal/bot/bot.go`):
+
+| Handler | File | Purpose |
+|---|---|---|
+| `onReady` | bot.go | Initial channel checks, history scan, reminder scheduler, slash command registration |
+| `onMessageCreate` | handlers.go | Save introduction on post to the introduction channel, assign role |
+| `onMessageUpdate` | handlers.go | Re-save introduction on edit (message ID unchanged, effectively a refresh) |
+| `onMessageDelete` | handlers.go | Look up introduction by message ID, delete DB record, revoke role if no introduction remains |
+| `onMessageDeleteBulk` | handlers.go | Same as above for bulk-deleted messages |
+| `onVoiceStateUpdate` | handlers.go | Send VC entry introduction; on leave/move away from a target VC, delete tracked entry-notification messages (`DELETE_ON_LEAVE`) |
+| `handleSlashCommand` | commands.go | Dispatches `/profilebot` and `/profile` |
+
+### Database Functions (internal/database)
+
+`intro.go`:
+- `SaveIntroduction(ctx, userID, channelID, messageID)` - UPSERT keyed on `user_id` (one row per user)
+- `GetIntroduction(ctx, userID)` - returns `nil` (not an error) when the user has no introduction
+- `GetIntroductionByMessageID(ctx, messageID)` - reverse lookup used by delete-sync, since `MessageDelete` events do not include the author
+- `DeleteIntroductionByMessageID(ctx, messageID)` - used by delete-sync
+- `GetIntroductionCount(ctx)`, `GetRecentIntroductions(ctx, limit)`, `HasIntroduction(ctx, userID)`
+
 ### Critical Implementation Requirements
 
 #### 1. PostgreSQL Advisory Lock (HIGHEST PRIORITY)
@@ -314,8 +337,11 @@ gopkg.in/yaml.v3                   // YAML config parsing
 - [ ] Introduction auto-saves on new messages
 - [ ] Role auto-assignment works ("自己紹介済み" role)
 - [ ] VC entry triggers text chat posting
+- [ ] VC leave/move deletes the tracked entry-notification message (`DELETE_ON_LEAVE=true`)
+- [ ] Deleting an introduction message removes the DB record and revokes the role
 - [ ] Role categories display correctly
 - [ ] `/profilebot` slash command executes manually
+- [ ] `/profile @user` shows the target user's introduction ephemerally, or the "not posted" message
 - [ ] Health check endpoints respond
 - [ ] Graceful shutdown closes DB connections cleanly
 

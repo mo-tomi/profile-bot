@@ -211,9 +211,8 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, voiceChannelID s
 		fullMember = member // フォールバック
 	}
 
-	// メンション（タップでプロフィールが開く）とユーザー名を併記する
-	// 例: @もーくん (@mo_kun_pan)。通知はAllowedMentionsで抑制する
-	username := fmt.Sprintf("<@%s> (@%s)", fullMember.User.ID, fullMember.User.Username)
+	// メンション形式（タップでプロフィールが開く）。通知はAllowedMentionsで抑制する
+	username := fmt.Sprintf("<@%s>", fullMember.User.ID)
 
 	slog.Info("Preparing to send introduction to VC", "user", username, "voice_channel_id", voiceChannelID)
 

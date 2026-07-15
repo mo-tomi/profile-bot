@@ -211,15 +211,9 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, voiceChannelID s
 		fullMember = member // フォールバック
 	}
 
-	// 表示名とユーザー名を併記する（例: もーくん (@mo_kun_pan)）
-	displayName := fullMember.User.GlobalName
-	if fullMember.Nick != "" {
-		displayName = fullMember.Nick
-	}
-	username := "@" + fullMember.User.Username
-	if displayName != "" && displayName != fullMember.User.Username {
-		username = fmt.Sprintf("%s (@%s)", displayName, fullMember.User.Username)
-	}
+	// メンション（タップでプロフィールが開く）とユーザー名を併記する
+	// 例: @もーくん (@mo_kun_pan)。通知はAllowedMentionsで抑制する
+	username := fmt.Sprintf("<@%s> (@%s)", fullMember.User.ID, fullMember.User.Username)
 
 	slog.Info("Preparing to send introduction to VC", "user", username, "voice_channel_id", voiceChannelID)
 
@@ -250,15 +244,16 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, voiceChannelID s
 				"━━━━━━━━━━━━━━━━━━━",
 			username, b.Config.IntroductionChannelID)
 
-		// まずVCチャットへ送信を試みる
-		if sent, err := s.ChannelMessageSend(voiceChannelID, message); err == nil {
+		// まずVCチャットへ送信を試みる（メンションで通知が飛ばないようAllowedMentionsを空にする）
+		noPing := &discordgo.MessageAllowedMentions{}
+		if sent, err := s.ChannelMessageSendComplex(voiceChannelID, &discordgo.MessageSend{Content: message, AllowedMentions: noPing}); err == nil {
 			b.trackVCMessage(guildID, member.User.ID, voiceChannelID, sent.ID)
 			slog.Info("Sent 'no introduction' message to VC", "voice_channel_id", voiceChannelID, "user", username)
 			return
 		} else {
 			// 失敗した場合のみ通知チャンネルへフォールバック（VC名を先頭に付与）
 			fallbackMessage := fmt.Sprintf("🔊 **%s** に入室しました\n\n%s", vcName, message)
-			sent, err := s.ChannelMessageSend(fallbackChannelID, fallbackMessage)
+			sent, err := s.ChannelMessageSendComplex(fallbackChannelID, &discordgo.MessageSend{Content: fallbackMessage, AllowedMentions: noPing})
 			if err != nil {
 				slog.Error("Failed to send 'no introduction' fallback message", "fallback_channel", fallbackChannelID, "error", err.Error())
 				return

@@ -205,14 +205,8 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, voiceChannelID s
 		fullMember = member // フォールバック
 	}
 
-	// メンバー表示名の解決（優先順位: Nick > GlobalName > Username）
+	// 入室メッセージには一意なユーザー名（@ハンドル）を使用する
 	username := fullMember.User.Username
-	if fullMember.User.GlobalName != "" {
-		username = fullMember.User.GlobalName
-	}
-	if fullMember.Nick != "" {
-		username = fullMember.Nick
-	}
 
 	slog.Info("Preparing to send introduction to VC", "user", username, "voice_channel_id", voiceChannelID)
 

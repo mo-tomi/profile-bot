@@ -139,6 +139,12 @@ func (b *Bot) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateU
 		return
 	}
 
+	// Bot（音楽Botなど）の入室には反応しない
+	if vs.Member != nil && vs.Member.User != nil && vs.Member.User.Bot {
+		slog.Info("Bot joined VC, skipping", "user_id", vs.UserID)
+		return
+	}
+
 	// 除外ユーザーかチェック
 	if contains(b.Config.ExcludedUserIDs, vs.UserID) {
 		slog.Info("Excluded user joined VC, skipping", "user_id", vs.UserID)
@@ -220,7 +226,22 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, voiceChannelID s
 
 	// 自己紹介が存在しない場合は「未投稿」メッセージを作成
 	if intro == nil {
-		message := fmt.Sprintf("━━━━━━━━━━━━━━━━━━━\n👤 %s さんが入室しました\n\n⚠️ この方の自己紹介はまだ投稿されていません\n━━━━━━━━━━━━━━━━━━━", username)
+		message := fmt.Sprintf(
+			"━━━━━━━━━━━━━━━━━━━\n"+
+				"👤 %s さんが入室しました\n\n"+
+				"⚠️ この方の自己紹介はまだ投稿されていません\n\n"+
+				"お時間のあるときに <#%s> で自己紹介を書いてもらえるとうれしいです✨\n"+
+				"書ける範囲でだいじょうぶです！\n\n"+
+				"【年齢】10代 / 20代 / 30代 (前半 / 後半)\n"+
+				"【都道府県】\n"+
+				"【障がい名】\n"+
+				"【手帳種類・等級】\n"+
+				"【利用している福祉制度・サービス】\n"+
+				"【しんどいこと・嫌なこと】\n"+
+				"【入った理由】\n"+
+				"【ひとこと】\n"+
+				"━━━━━━━━━━━━━━━━━━━",
+			username, b.Config.IntroductionChannelID)
 
 		// まずVCチャットへ送信を試みる
 		if sent, err := s.ChannelMessageSend(voiceChannelID, message); err == nil {

@@ -211,8 +211,15 @@ func (b *Bot) sendIntroductionToVoiceChat(s *discordgo.Session, voiceChannelID s
 		fullMember = member // フォールバック
 	}
 
-	// 入室メッセージには一意なユーザー名（@ハンドル）を使用する
-	username := fullMember.User.Username
+	// 表示名とユーザー名を併記する（例: もーくん (@mo_kun_pan)）
+	displayName := fullMember.User.GlobalName
+	if fullMember.Nick != "" {
+		displayName = fullMember.Nick
+	}
+	username := "@" + fullMember.User.Username
+	if displayName != "" && displayName != fullMember.User.Username {
+		username = fmt.Sprintf("%s (@%s)", displayName, fullMember.User.Username)
+	}
 
 	slog.Info("Preparing to send introduction to VC", "user", username, "voice_channel_id", voiceChannelID)
 
